@@ -1,12 +1,11 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import urllib.parse
 
 st.set_page_config(page_title="AI Visual Itinerary Planner", page_icon="✈️", layout="centered")
 
 st.title("✈️ AI Visual Itinerary Planner")
-st.caption("Upload photos of places you saw on social media, and AI will plan your trip directly.")
+st.caption("Upload photos of places you saw on social media, and AI will plan your trip with precise time schedules and direct map links.")
 
 # 從 Streamlit Secrets 安全讀取金鑰
 try:
@@ -32,28 +31,25 @@ if uploaded_files:
     extra_details = st.text_input("💡 Hints (Optional): Add text hints for blurry photos.")
     force_schedule = st.checkbox("⚠️ Plan itinerary even if locations are extremely far apart.")
 
-    # 優化按鈕：文字簡短、顏色醒目、全寬顯示
-    if st.button("✨ Generate Itinerary", type="primary", use_container_width=True):
-        with st.spinner("Analyzing..."):
+    # 醒目大按鈕
+    if st.button("✨ Generate Detailed Itinerary", type="primary", use_container_width=True):
+        with st.spinner("Analyzing photos and building your schedule..."):
             
-            # 優化 Prompt：強制極簡輸出
+            # 優化 Prompt：要求具體時間段與點對點 Google Maps 連結
             prompt = f"""
             Analyze the uploaded photos and extra details: {extra_details}.
             Output strictly in ENGLISH. 
-            CRITICAL INSTRUCTION: Be extremely concise. NO introductory or concluding sentences. DO NOT say "Here is your itinerary". Jump directly into the plan.
             
-            1. If distance is extreme and user did NOT check force schedule ({force_schedule}), output ONLY a short warning.
-            2. Otherwise, provide a direct, highly structured itinerary using a Markdown table or compact bullet points. Include ONLY: Day/Time, Location, and suggested transport.
+            Requirements:
+            1. Provide a practical, structured itinerary divided by days. 
+            2. Include specific time slots (e.g., 09:00 - 11:00) for each activity, along with suggested transport methods and estimated travel times.
+            3. **MAP INTEGRATION**: For EVERY location or attraction mentioned in the itinerary, you MUST format it as a clickable Markdown link pointing directly to its Google Maps search page, using this exact format: `[Location Name](https://www.google.com/maps/search/?api=1&query=Location+Name)` (replace spaces with plus signs or standard URL encoding).
             """
             
             try:
                 response = model.generate_content([prompt, *images])
                 st.markdown("---")
                 st.markdown(response.text)
-                
-                search_query = urllib.parse.quote(" ".join([extra_details if extra_details else "Attractions"]))
-                maps_url = f"https://www.google.com/maps/search/?api=1&query={search_query}"
-                st.markdown(f"🗺️ 👉 [Open in Google Maps]({maps_url})")
 
             except Exception as e:
                 st.error(f"Error: {str(e)}")
