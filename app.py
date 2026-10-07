@@ -18,7 +18,7 @@ if not api_key:
 
 # Configure Gemini API
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
+model = genai.GenerativeModel('gemini-1.5-pro')
 
 # 2. Multi-image uploader
 uploaded_files = st.file_uploader("Upload attraction photos (Multiple selection allowed):", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
