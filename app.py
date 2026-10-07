@@ -3,30 +3,24 @@ import google.generativeai as genai
 from PIL import Image
 import urllib.parse
 
-# Page Configuration
 st.set_page_config(page_title="AI Visual Itinerary Planner", page_icon="✈️", layout="centered")
 
-st.title("✈️ AI Visual Itinerary Planner (MVP)")
-st.caption("Upload photos of places you saw on social media, and AI will automatically identify the locations and plan your itinerary!")
+st.title("✈️ AI Visual Itinerary Planner")
+st.caption("Upload photos of places you saw on social media, and AI will plan your trip directly.")
 
-# 1. API Key Input
-api_key = st.sidebar.text_input("Enter Gemini API Key:", type="password")
-
-if not api_key:
-    st.info("👈 Please enter your Gemini API Key in the left sidebar to get started.")
+# 從 Streamlit Secrets 安全讀取金鑰
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except KeyError:
+    st.error("System configuration error: API Key missing.")
     st.stop()
 
-# Configure Gemini API
 genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-3.1-flash-lite')
 
-# 2. Multi-image uploader
-uploaded_files = st.file_uploader("Upload attraction photos (Multiple selection allowed):", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+uploaded_files = st.file_uploader("Upload photos (Multiple allowed):", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
 if uploaded_files:
-    st.write(f"Uploaded {len(uploaded_files)} photo(s):")
-    
-    # Display thumbnails
     cols = st.columns(min(len(uploaded_files), 4))
     images = []
     for idx, uploaded_file in enumerate(uploaded_files):
@@ -35,47 +29,31 @@ if uploaded_files:
         with cols[idx % 4]:
             st.image(img, use_container_width=True)
 
-    # Extra details input
-    extra_details = st.text_input("💡 Hints/Additional Details (Optional): If any photos are hard to recognize, add text hints here (e.g., Admiralty, Repulse Bay)")
+    extra_details = st.text_input("💡 Hints (Optional): Add text hints for blurry photos.")
+    force_schedule = st.checkbox("⚠️ Plan itinerary even if locations are extremely far apart.")
 
-    # Checkbox for extreme distance
-    force_schedule = st.checkbox("⚠️ If the locations are extremely far apart (e.g., cross-country/continent), still proceed to group and plan the itinerary.")
-
-    if st.button("🚀 Identify Locations & Plan Itinerary", type="primary"):
-        with st.spinner("AI is analyzing photos and geographical locations..."):
+    # 優化按鈕：文字簡短、顏色醒目、全寬顯示
+    if st.button("✨ Generate Itinerary", type="primary", use_container_width=True):
+        with st.spinner("Analyzing..."):
             
-            # Prompt construction (Instructed to reply strictly in English)
+            # 優化 Prompt：強制極簡輸出
             prompt = f"""
-            You are a professional AI travel itinerary planner. Please analyze the user's uploaded photos and additional details.
-            Additional Details: {extra_details}
+            Analyze the uploaded photos and extra details: {extra_details}.
+            Output strictly in ENGLISH. 
+            CRITICAL INSTRUCTION: Be extremely concise. NO introductory or concluding sentences. DO NOT say "Here is your itinerary". Jump directly into the plan.
             
-            Please execute the following steps and output your ENTIRE response strictly in ENGLISH:
-            
-            1. **Location Identification**: Identify the specific attractions/locations in the photos. If a photo is too blurry or unidentifiable, explicitly point out which photo it is and prompt the user to provide more details.
-            2. **Feasibility Check**: Check if the geographical distance between the identified locations is too large (e.g., one in Asia, one in Europe).
-               - If the distance is extreme and the user has NOT checked the force scheduling option, return a warning explaining that the itinerary is unreasonable, and ask if they are sure they want to plan an extreme long-distance trip.
-               - If the distance is extreme but the user HAS checked the force scheduling option, group the locations by large regions and plan separate itineraries within those regions.
-            3. **Itinerary Planning**: Based on the number of locations, reasonably arrange the number of days (e.g., 1-day tour, multi-day tour). Provide a specific daily schedule, suggested transportation methods between locations, and estimated travel time.
-            
-            Please format your output clearly using Markdown.
+            1. If distance is extreme and user did NOT check force schedule ({force_schedule}), output ONLY a short warning.
+            2. Otherwise, provide a direct, highly structured itinerary using a Markdown table or compact bullet points. Include ONLY: Day/Time, Location, and suggested transport.
             """
             
             try:
-                # Call Gemini Vision API
                 response = model.generate_content([prompt, *images])
-                
                 st.markdown("---")
-                st.subheader("📋 Your AI-Generated Itinerary")
                 st.markdown(response.text)
                 
-                # Generate Google Maps link
-                st.markdown("---")
-                st.subheader("🗺️ Quick Navigation & Maps Links")
-                st.write("Click the link below to view the search results directly on Google Maps:")
-                
-                search_query = urllib.parse.quote(" ".join([extra_details if extra_details else "Popular attractions"]))
+                search_query = urllib.parse.quote(" ".join([extra_details if extra_details else "Attractions"]))
                 maps_url = f"https://www.google.com/maps/search/?api=1&query={search_query}"
-                st.markdown(f"👉 [Open Navigation Preview on Google Maps]({maps_url})")
+                st.markdown(f"🗺️ 👉 [Open in Google Maps]({maps_url})")
 
             except Exception as e:
-                st.error(f"An error occurred during analysis: {str(e)}")
+                st.error(f"Error: {str(e)}")
