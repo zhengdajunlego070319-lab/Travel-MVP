@@ -1,5 +1,5 @@
 import base64
-import time  # NEW: 引入時間套件來控制搜尋速度
+import time
 from geopy.geocoders import Nominatim
 import folium
 from PIL import Image
@@ -79,8 +79,8 @@ if uploaded_files:
             Constraints:
             1. Anchor ONLY on locations found in the images. Do not hallucinate external spots.
             2. Apply these parameters: Duration: {duration_option}, Pace: {pace_option}, Window: {start_time} to {end_time}.
-            3. Provide a beautifully formatted chronological itinerary divided clearly by days (e.g. Day 1, Day 2) using Markdown headings and bullet points.
-            4. RECOMMENDATIONS: Suggest nearby restaurants or hidden gems ONLY IF they have exceptionally high historical recognition. If uncertain, leave blank. Include a 1-sentence reason and a disclaimer to check operating hours.
+            3. Provide a beautifully formatted chronological itinerary divided clearly by days using Markdown headings and bullet points.
+            4. EXTRA RECOMMENDATIONS: After the main itinerary, create a dedicated Markdown table titled "### Extra Recommendations". The table MUST have these columns: | Day | Spot Name | Type (Dining/Hidden Gem) | Reason to Visit |. ONLY include spots with exceptionally high historical recognition. Include a 1-sentence disclaimer below the table to check operating hours.
             
             CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the key EXACT OFFICIAL LANDMARK NAMES (e.g., Victoria Peak, Hong Kong Disneyland) in chronological order.
             Example:
@@ -96,7 +96,6 @@ if uploaded_files:
             parts = raw_text.split("===MAP_DATA===")
             st.session_state.itinerary_text = parts[0].strip()
             loc_string = parts[1].strip()
-            # 清理換行符號，確保只有乾淨的地名
             st.session_state.all_locations = [loc.replace('\n', '').strip() for loc in loc_string.split(',') if loc.replace('\n', '').strip()]
         else:
             st.session_state.itinerary_text = raw_text.strip()
@@ -109,24 +108,62 @@ if uploaded_files:
       except Exception as e:
         st.error(f'Generation Error: {str(e)}')
 
-# --- Render Phase 1 Output & Optional Map ---
+# --- Render Phase 1 Output & Refinement & Optional Map ---
 if st.session_state.phase1_done:
   st.markdown('---')
   st.markdown('### Your Pinpoint Itinerary')
   st.markdown(st.session_state.itinerary_text)
 
+  # Iterative Feedback Mechanism
+  with st.expander("Tweak this itinerary"):
+      user_feedback = st.text_area("What would you like to change? (e.g., 'Make Day 1 more relaxed', 'Swap the museum for a park')")
+      if st.button("Update Schedule"):
+          with st.spinner("Adjusting your schedule based on your feedback..."):
+              refine_prompt = f"""
+              You are a professional travel planner. Review the following existing itinerary and adjust it based on the user's specific feedback.
+              OUTPUT STRICTLY IN ENGLISH. DO NOT USE ANY EMOJIS OR EMOTICONS.
+              
+              Existing Itinerary:
+              {st.session_state.itinerary_text}
+              
+              User Feedback for Adjustments:
+              {user_feedback}
+              
+              Constraints:
+              1. Modify the itinerary to reflect the user's feedback precisely.
+              2. Maintain the exact same formatting structure: Main chronological itinerary first, followed by the "### Extra Recommendations" table.
+              
+              CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the updated key EXACT OFFICIAL LANDMARK NAMES in chronological order.
+              """
+              try:
+                  refine_resp = model.generate_content([refine_prompt])
+                  raw_refine_text = refine_resp.text
+                  
+                  if "===MAP_DATA===" in raw_refine_text:
+                      parts = raw_refine_text.split("===MAP_DATA===")
+                      st.session_state.itinerary_text = parts[0].strip()
+                      loc_string = parts[1].strip()
+                      st.session_state.all_locations = [loc.replace('\n', '').strip() for loc in loc_string.split(',') if loc.replace('\n', '').strip()]
+                  else:
+                      st.session_state.itinerary_text = raw_refine_text.strip()
+                  
+                  # Reset Phase 2 because the itinerary changed
+                  st.session_state.phase2_done = False
+                  st.rerun()
+              except Exception as e:
+                  st.error(f'Refinement Error: {str(e)}')
+
   # Render Map ONLY if user opted in
   if enable_map and st.session_state.all_locations:
     st.markdown('### Global Route Overview')
     with st.spinner('Plotting your chronological journey on the map...'):
-        geolocator = Nominatim(user_agent='pinpoint_app_v3')
+        geolocator = Nominatim(user_agent='pinpoint_app_v4')
         m = folium.Map(location=[22.3193, 114.1694], zoom_start=11)
         valid_coords = []
         missing_locs = []
 
         for idx, loc in enumerate(st.session_state.all_locations):
             try:
-                # 加上 Hong Kong 限定範圍，提高準確率
                 location = geolocator.geocode(loc + ', Hong Kong', timeout=10)
                 if location:
                     coords = [location.latitude, location.longitude]
@@ -142,14 +179,12 @@ if st.session_state.phase1_done:
                 else:
                     missing_locs.append(loc)
                 
-                # 關鍵修復：強制暫停 1 秒，防止被伺服器封鎖
                 time.sleep(1)
                 
             except Exception as e:
                 missing_locs.append(loc)
                 time.sleep(1)
 
-        # 畫出連線
         if len(valid_coords) > 1:
             folium.PolyLine(
                 valid_coords, color='#ff4b4b', weight=3, opacity=0.8
@@ -158,7 +193,6 @@ if st.session_state.phase1_done:
 
         st_folium(m, width=700, height=450, key="global_route_map")
         
-        # 友善提示找不到的地點
         if missing_locs:
             st.info(f"Note: Could not precisely map the following locations: {', '.join(missing_locs)}")
 
@@ -208,6 +242,9 @@ if st.session_state.phase2_done:
             h1, h2, h3 {{ color: #111; }}
             hr {{ border: 0; height: 1px; background: #ccc; margin: 20px 0; }}
             .content-box {{ background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #eee; white-space: pre-wrap; font-family: inherit; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
+            th {{ background-color: #f2f2f2; font-weight: bold; }}
         </style>
     </head>
     <body>
