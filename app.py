@@ -108,56 +108,57 @@ if uploaded_files:
       except Exception as e:
         st.error(f'Generation Error: {str(e)}')
 
-# --- Render Phase 1 Output & Refinement & Optional Map ---
+# --- Render Phase 1 Output & Direct Refinement ---
 if st.session_state.phase1_done:
   st.markdown('---')
   st.markdown('### Your Pinpoint Itinerary')
   st.markdown(st.session_state.itinerary_text)
 
-  # Iterative Feedback Mechanism
-  with st.expander("Tweak this itinerary"):
-      user_feedback = st.text_area("What would you like to change? (e.g., 'Make Day 1 more relaxed', 'Swap the museum for a park')")
-      if st.button("Update Schedule"):
-          with st.spinner("Adjusting your schedule based on your feedback..."):
-              refine_prompt = f"""
-              You are a professional travel planner. Review the following existing itinerary and adjust it based on the user's specific feedback.
-              OUTPUT STRICTLY IN ENGLISH. DO NOT USE ANY EMOJIS OR EMOTICONS.
+  # NEW: Highly visible refinement section (No longer hidden in an expander)
+  st.markdown('### Refine Your Itinerary')
+  user_feedback = st.text_area("Need adjustments? Tell us what to change (e.g., 'Make Day 1 more relaxed', 'Swap the museum for a park'):")
+  
+  if st.button("Update Schedule"):
+      with st.spinner("Adjusting your schedule based on your feedback..."):
+          refine_prompt = f"""
+          You are a professional travel planner. Review the following existing itinerary and adjust it based on the user's specific feedback.
+          OUTPUT STRICTLY IN ENGLISH. DO NOT USE ANY EMOJIS OR EMOTICONS.
+          
+          Existing Itinerary:
+          {st.session_state.itinerary_text}
+          
+          User Feedback for Adjustments:
+          {user_feedback}
+          
+          Constraints:
+          1. Modify the itinerary to reflect the user's feedback precisely.
+          2. Maintain the exact same formatting structure: Main chronological itinerary first, followed by the "### Extra Recommendations" table.
+          
+          CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the updated key EXACT OFFICIAL LANDMARK NAMES in chronological order.
+          """
+          try:
+              refine_resp = model.generate_content([refine_prompt])
+              raw_refine_text = refine_resp.text
               
-              Existing Itinerary:
-              {st.session_state.itinerary_text}
+              if "===MAP_DATA===" in raw_refine_text:
+                  parts = raw_refine_text.split("===MAP_DATA===")
+                  st.session_state.itinerary_text = parts[0].strip()
+                  loc_string = parts[1].strip()
+                  st.session_state.all_locations = [loc.replace('\n', '').strip() for loc in loc_string.split(',') if loc.replace('\n', '').strip()]
+              else:
+                  st.session_state.itinerary_text = raw_refine_text.strip()
               
-              User Feedback for Adjustments:
-              {user_feedback}
-              
-              Constraints:
-              1. Modify the itinerary to reflect the user's feedback precisely.
-              2. Maintain the exact same formatting structure: Main chronological itinerary first, followed by the "### Extra Recommendations" table.
-              
-              CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the updated key EXACT OFFICIAL LANDMARK NAMES in chronological order.
-              """
-              try:
-                  refine_resp = model.generate_content([refine_prompt])
-                  raw_refine_text = refine_resp.text
-                  
-                  if "===MAP_DATA===" in raw_refine_text:
-                      parts = raw_refine_text.split("===MAP_DATA===")
-                      st.session_state.itinerary_text = parts[0].strip()
-                      loc_string = parts[1].strip()
-                      st.session_state.all_locations = [loc.replace('\n', '').strip() for loc in loc_string.split(',') if loc.replace('\n', '').strip()]
-                  else:
-                      st.session_state.itinerary_text = raw_refine_text.strip()
-                  
-                  # Reset Phase 2 because the itinerary changed
-                  st.session_state.phase2_done = False
-                  st.rerun()
-              except Exception as e:
-                  st.error(f'Refinement Error: {str(e)}')
+              # Reset Phase 2 because the itinerary changed
+              st.session_state.phase2_done = False
+              st.rerun()
+          except Exception as e:
+              st.error(f'Refinement Error: {str(e)}')
 
   # Render Map ONLY if user opted in
   if enable_map and st.session_state.all_locations:
     st.markdown('### Global Route Overview')
     with st.spinner('Plotting your chronological journey on the map...'):
-        geolocator = Nominatim(user_agent='pinpoint_app_v4')
+        geolocator = Nominatim(user_agent='pinpoint_app_v5')
         m = folium.Map(location=[22.3193, 114.1694], zoom_start=11)
         valid_coords = []
         missing_locs = []
