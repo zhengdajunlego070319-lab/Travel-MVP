@@ -65,8 +65,8 @@ if uploaded_files:
 
   extra_details = st.text_input('Additional Hints (Optional):')
   
-  # NEW: Map Toggle to prevent freezing
-  enable_map = st.checkbox('Generate Interactive Route Map (Note: May take an extra 1-2 minutes to load)', value=False)
+  # UPDATED: Vague waiting time warning
+  enable_map = st.checkbox('Generate Interactive Route Map (Note: May take a few minutes to load)', value=False)
 
   # --- PHASE 1: Generate Itinerary ---
   if st.button('Generate Custom Itinerary', type='primary', use_container_width=True):
@@ -148,11 +148,11 @@ if st.session_state.phase1_done:
 
         st_folium(m, width=700, height=450, key="global_route_map")
 
-  # --- PHASE 2: Transport & Budget Table ---
+  # --- PHASE 2: Detailed Transport & Itemized Budget ---
   st.markdown('---')
   if not st.session_state.phase2_done:
     if st.button('Get Transport & Budget Breakdown', type='primary', use_container_width=True):
-      with st.spinner('Calculating logistics and table estimates...'):
+      with st.spinner('Calculating exact routes and itemized budget...'):
         budget_prompt = f"""
                 Based on this itinerary:
                 {st.session_state.itinerary_text}
@@ -160,10 +160,13 @@ if st.session_state.phase1_done:
                 OUTPUT STRICTLY IN ENGLISH. DO NOT USE ANY EMOJIS.
 
                 Requirements:
-                1. Output a SINGLE structured Markdown table summarizing logistics and budget breakdown.
-                2. Table columns MUST be exactly:
-                   | Day / Segment | Transit Route & Duration | Estimated Transit Cost | Estimated Dining Cost | Estimated Admission / Other | Total Segment Cost |
-                3. Below the table, include a 1-sentence disclaimer stating that costs are baseline historical estimates and actual prices may vary.
+                1. **Detailed Transport Guide**: First, provide specific, realistic point-to-point public transit directions between each location. Mimic real-world map logic (e.g., "Take MTR Tsuen Wan Line from X to Y, then take Bus 973"). Include estimated travel times.
+                2. **Itemized Budget Breakdown**: Under a new heading, provide a highly granular cost breakdown in HKD.
+                   - Transport: List the estimated cost for EACH specific ride.
+                   - Dining: Estimate the cost for EACH specific meal using a reasonable range (e.g., $80 - $150), adjusting for a {pace_option} travel pace.
+                   - Attractions: List specific admission fees if applicable.
+                3. **Total Calculation**: Conclude with a clear "Total Estimated Budget Range" that sums up all the itemized costs.
+                4. Use clear Markdown headings (`### Transport Guide` and `### Itemized Budget`) and bullet points for readability. Do not use a single compressed table.
                 """
         try:
           budget_resp = model.generate_content([budget_prompt])
@@ -173,7 +176,7 @@ if st.session_state.phase1_done:
         except Exception as e:
           st.error(f'Error: {str(e)}')
 
-# --- Render Phase 2 Table & HTML Export ---
+# --- Render Phase 2 Details & HTML Export ---
 if st.session_state.phase2_done:
   st.markdown('### Logistics & Budget Breakdown')
   st.markdown(st.session_state.transport_budget_text)
@@ -187,14 +190,10 @@ if st.session_state.phase2_done:
     <head>
         <title>Pinpoint Itinerary</title>
         <style>
-            body {{ font-family: Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; line-height: 1.6; }}
+            body {{ font-family: Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; line-height: 1.6; color: #333; }}
             h1, h2, h3 {{ color: #111; }}
             hr {{ border: 0; height: 1px; background: #ccc; margin: 20px 0; }}
-            pre {{ white-space: pre-wrap; font-family: inherit; background: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #eee; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-            th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
-            th {{ background-color: #f2f2f2; font-weight: bold; }}
-            .disclaimer {{ font-size: 0.9em; color: #666; font-style: italic; margin-top: 10px; }}
+            .content-box {{ background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #eee; white-space: pre-wrap; font-family: inherit; }}
         </style>
     </head>
     <body>
@@ -202,14 +201,10 @@ if st.session_state.phase2_done:
         <h3>Grab your Itinerary on Fingertips!</h3>
         <hr>
         <h2>Your Itinerary</h2>
-        <div style="background: #fff; padding: 10px;">
-            {st.session_state.itinerary_text.replace('\n', '<br>')}
-        </div>
+        <div class="content-box">{st.session_state.itinerary_text}</div>
         <hr>
         <h2>Logistics & Budget</h2>
-        <div style="background: #fff; padding: 10px;">
-            {st.session_state.transport_budget_text.replace('\n', '<br>')}
-        </div>
+        <div class="content-box">{st.session_state.transport_budget_text}</div>
     </body>
     </html>
     """
