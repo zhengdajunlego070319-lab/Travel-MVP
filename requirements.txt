@@ -1,3 +1,7 @@
 streamlit
 google-generativeai
-Pillow
+pillow
+folium
+streamlit-folium
+fpdf2
+geopy
