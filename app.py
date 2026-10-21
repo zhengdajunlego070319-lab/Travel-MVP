@@ -18,9 +18,7 @@ st.markdown("---")
 try:
   api_key = st.secrets["GEMINI_API_KEY"]
 except KeyError:
-  st.error(
-      "System Error: API Key missing. Please configure Streamlit Secrets."
-  )
+  st.error("System Error: API Key missing. Please configure Streamlit Secrets.")
   st.stop()
 
 genai.configure(api_key=api_key)
@@ -31,8 +29,8 @@ if 'phase1_done' not in st.session_state:
   st.session_state.phase1_done = False
 if 'itinerary_text' not in st.session_state:
   st.session_state.itinerary_text = ''
-if 'daily_locations' not in st.session_state:
-  st.session_state.daily_locations = {}
+if 'all_locations' not in st.session_state:
+  st.session_state.all_locations = []
 if 'phase2_done' not in st.session_state:
   st.session_state.phase2_done = False
 if 'transport_budget_text' not in st.session_state:
@@ -54,7 +52,6 @@ if uploaded_files:
     with cols[idx % 4]:
       st.image(img, use_container_width=True)
 
-  # User-friendly section header without emojis
   st.markdown('### Trip Preferences')
   col1, col2 = st.columns(2)
   with col1:
@@ -69,10 +66,7 @@ if uploaded_files:
   extra_details = st.text_input('Additional Hints (Optional):')
 
   # --- PHASE 1: Generate Itinerary ---
-  # Prominent primary action button
-  if st.button(
-      'Generate Custom Itinerary', type='primary', use_container_width=True
-  ):
+  if st.button('Generate Custom Itinerary', type='primary', use_container_width=True):
     with st.spinner('Analyzing and building your schedule...'):
 
       prompt = f"""
@@ -94,8 +88,8 @@ if uploaded_files:
         response = model.generate_content([prompt, *images])
         raw_text = response.text
 
-        # Parse Daily Locations for Folium Maps
-        daily_locs = {}
+        # Parse Sequential Locations for a Single Global Map
+        parsed_locations = []
         lines = raw_text.split('\n')
         clean_lines = []
 
@@ -104,12 +98,13 @@ if uploaded_files:
             parts = line.split(':', 1)
             day_title = parts[0].strip()
             locs = [loc.strip() for loc in parts[1].split(',') if loc.strip()]
-            daily_locs[day_title] = locs
+            for l in locs:
+                parsed_locations.append((day_title, l))
           else:
             clean_lines.append(line)
 
         st.session_state.itinerary_text = '\n'.join(clean_lines).strip()
-        st.session_state.daily_locations = daily_locs
+        st.session_state.all_locations = parsed_locations
         st.session_state.phase1_done = True
         st.session_state.phase2_done = False  # Reset phase 2
         st.rerun()
@@ -117,53 +112,51 @@ if uploaded_files:
       except Exception as e:
         st.error(f'Generation Error: {str(e)}')
 
-# --- Render Phase 1 Output & Daily Folium Maps ---
+# --- Render Phase 1 Output & Single Global Folium Map ---
 if st.session_state.phase1_done:
   st.markdown('---')
   st.markdown('### Your Pinpoint Itinerary')
   st.markdown(st.session_state.itinerary_text)
 
-  # Render Daily Route Maps
-  if st.session_state.daily_locations:
-    st.markdown('### Daily Route Overview')
-    geolocator = Nominatim(user_agent='pinpoint_app')
-
-    for day_title, locs in st.session_state.daily_locations.items():
-      st.markdown(f'#### {day_title} Route Map')
-      with st.spinner(f'Plotting map for {day_title}...'):
+  # Render Single Route Map with Sequential Path
+  if st.session_state.all_locations:
+    st.markdown('### Global Route Overview')
+    with st.spinner('Plotting your chronological journey...'):
+        geolocator = Nominatim(user_agent='pinpoint_app')
         m = folium.Map(location=[22.3193, 114.1694], zoom_start=11)
         valid_coords = []
 
-        for loc in locs:
-          try:
-            location = geolocator.geocode(loc + ', Hong Kong', timeout=5)
-            if location:
-              folium.Marker(
-                  [location.latitude, location.longitude], popup=loc
-              ).add_to(m)
-              valid_coords.append([location.latitude, location.longitude])
-          except:
-            pass
+        for idx, (day_title, loc) in enumerate(st.session_state.all_locations):
+            try:
+                location = geolocator.geocode(loc + ', Hong Kong', timeout=5)
+                if location:
+                    coords = [location.latitude, location.longitude]
+                    
+                    # Create sequentially numbered tooltips and day-specific popups
+                    folium.Marker(
+                        coords,
+                        popup=f"<b>{day_title}</b><br>{loc}",
+                        tooltip=f"Stop {idx + 1}: {loc}",
+                        icon=folium.Icon(color='red', icon='info-sign')
+                    ).add_to(m)
+                    
+                    valid_coords.append(coords)
+            except:
+                pass
 
         if len(valid_coords) > 1:
-          folium.PolyLine(
-              valid_coords, color='blue', weight=2.5, opacity=0.8
-          ).add_to(m)
-          m.fit_bounds(valid_coords)
+            # Draw a continuous line connecting all spots in order
+            folium.PolyLine(
+                valid_coords, color='#ff4b4b', weight=3, opacity=0.8
+            ).add_to(m)
+            m.fit_bounds(valid_coords)
 
-        st_folium(
-            m, width=700, height=350, key=f"map_{day_title.replace(' ', '_')}"
-        )
+        st_folium(m, width=700, height=450, key="global_route_map")
 
   # --- PHASE 2: Transport & Budget Table ---
   st.markdown('---')
   if not st.session_state.phase2_done:
-    # Prominent primary action button
-    if st.button(
-        'Get Transport & Budget Breakdown',
-        type='primary',
-        use_container_width=True,
-    ):
+    if st.button('Get Transport & Budget Breakdown', type='primary', use_container_width=True):
       with st.spinner('Calculating logistics and table estimates...'):
         budget_prompt = f"""
                 Based on this itinerary:
@@ -222,7 +215,6 @@ if st.session_state.phase2_done:
     """
   b64_html = base64.b64encode(full_html.encode()).decode()
 
-  # Prominent styled HTML download button
   href_html = f'<a href="data:text/html;base64,{b64_html}" download="Pinpoint_Itinerary.html" style="text-decoration: none; padding: 14px 28px; background-color: #ff4b4b; color: white; font-weight: bold; border-radius: 6px; display: block; text-align: center; font-size: 16px;">Download Interactive HTML Itinerary</a>'
 
   st.markdown(href_html, unsafe_allow_html=True)
