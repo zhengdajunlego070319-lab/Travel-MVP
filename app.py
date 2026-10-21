@@ -1,5 +1,4 @@
 import base64
-import re
 from geopy.geocoders import Nominatim
 import folium
 from PIL import Image
@@ -53,6 +52,7 @@ if uploaded_files:
       st.image(img, use_container_width=True)
 
   st.markdown('### Trip Preferences')
+  
   col1, col2 = st.columns(2)
   with col1:
     duration_option = st.selectbox(
@@ -64,6 +64,9 @@ if uploaded_files:
     end_time = st.text_input('End Time:', value='21:00')
 
   extra_details = st.text_input('Additional Hints (Optional):')
+  
+  # NEW: Map Toggle to prevent freezing
+  enable_map = st.checkbox('Generate Interactive Route Map (Note: May take an extra 1-2 minutes to load)', value=False)
 
   # --- PHASE 1: Generate Itinerary ---
   if st.button('Generate Custom Itinerary', type='primary', use_container_width=True):
@@ -76,35 +79,29 @@ if uploaded_files:
             Constraints:
             1. Anchor ONLY on locations found in the images. Do not hallucinate external spots.
             2. Apply these parameters: Duration: {duration_option}, Pace: {pace_option}, Window: {start_time} to {end_time}.
-            3. Provide a chronological itinerary divided clearly by days (e.g. Day 1, Day 2).
+            3. Provide a beautifully formatted chronological itinerary divided clearly by days (e.g. Day 1, Day 2) using Markdown headings and bullet points.
             4. RECOMMENDATIONS: Suggest nearby restaurants or hidden gems ONLY IF they have exceptionally high historical recognition. If uncertain, leave blank. Include a 1-sentence reason and a disclaimer to check operating hours.
             
-            At the very end of your response, parse the key spots for EACH day separately for mapping, formatted EXACTLY like this (one line per day):
-            DAY 1 LOCATIONS: Location A, Location B
-            DAY 2 LOCATIONS: Location C, Location D
+            CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the key locations in chronological order.
+            Example:
+            ===MAP_DATA===
+            Location A, Location B, Location C
             """
 
       try:
         response = model.generate_content([prompt, *images])
         raw_text = response.text
 
-        # Parse Sequential Locations for a Single Global Map
-        parsed_locations = []
-        lines = raw_text.split('\n')
-        clean_lines = []
+        # Clean Parsing: Separates Itinerary from Map Data without breaking Markdown
+        if "===MAP_DATA===" in raw_text:
+            parts = raw_text.split("===MAP_DATA===")
+            st.session_state.itinerary_text = parts[0].strip()
+            loc_string = parts[1].strip()
+            st.session_state.all_locations = [loc.strip() for loc in loc_string.split(',') if loc.strip()]
+        else:
+            st.session_state.itinerary_text = raw_text.strip()
+            st.session_state.all_locations = []
 
-        for line in lines:
-          if re.match(r'^DAY \d+ LOCATIONS:', line, re.IGNORECASE):
-            parts = line.split(':', 1)
-            day_title = parts[0].strip()
-            locs = [loc.strip() for loc in parts[1].split(',') if loc.strip()]
-            for l in locs:
-                parsed_locations.append((day_title, l))
-          else:
-            clean_lines.append(line)
-
-        st.session_state.itinerary_text = '\n'.join(clean_lines).strip()
-        st.session_state.all_locations = parsed_locations
         st.session_state.phase1_done = True
         st.session_state.phase2_done = False  # Reset phase 2
         st.rerun()
@@ -112,30 +109,29 @@ if uploaded_files:
       except Exception as e:
         st.error(f'Generation Error: {str(e)}')
 
-# --- Render Phase 1 Output & Single Global Folium Map ---
+# --- Render Phase 1 Output & Optional Map ---
 if st.session_state.phase1_done:
   st.markdown('---')
   st.markdown('### Your Pinpoint Itinerary')
   st.markdown(st.session_state.itinerary_text)
 
-  # Render Single Route Map with Sequential Path
-  if st.session_state.all_locations:
+  # Render Map ONLY if user opted in
+  if enable_map and st.session_state.all_locations:
     st.markdown('### Global Route Overview')
-    with st.spinner('Plotting your chronological journey...'):
-        geolocator = Nominatim(user_agent='pinpoint_app')
+    with st.spinner('Plotting your chronological journey on the map...'):
+        geolocator = Nominatim(user_agent='pinpoint_app_v2')
         m = folium.Map(location=[22.3193, 114.1694], zoom_start=11)
         valid_coords = []
 
-        for idx, (day_title, loc) in enumerate(st.session_state.all_locations):
+        for idx, loc in enumerate(st.session_state.all_locations):
             try:
                 location = geolocator.geocode(loc + ', Hong Kong', timeout=5)
                 if location:
                     coords = [location.latitude, location.longitude]
                     
-                    # Create sequentially numbered tooltips and day-specific popups
                     folium.Marker(
                         coords,
-                        popup=f"<b>{day_title}</b><br>{loc}",
+                        popup=loc,
                         tooltip=f"Stop {idx + 1}: {loc}",
                         icon=folium.Icon(color='red', icon='info-sign')
                     ).add_to(m)
@@ -145,7 +141,6 @@ if st.session_state.phase1_done:
                 pass
 
         if len(valid_coords) > 1:
-            # Draw a continuous line connecting all spots in order
             folium.PolyLine(
                 valid_coords, color='#ff4b4b', weight=3, opacity=0.8
             ).add_to(m)
@@ -195,21 +190,26 @@ if st.session_state.phase2_done:
             body {{ font-family: Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; line-height: 1.6; }}
             h1, h2, h3 {{ color: #111; }}
             hr {{ border: 0; height: 1px; background: #ccc; margin: 20px 0; }}
-            pre {{ white-space: pre-wrap; font-family: inherit; background: #f9f9f9; padding: 15px; border-radius: 5px; }}
+            pre {{ white-space: pre-wrap; font-family: inherit; background: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #eee; }}
             table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-            th {{ background-color: #f2f2f2; }}
+            th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
+            th {{ background-color: #f2f2f2; font-weight: bold; }}
+            .disclaimer {{ font-size: 0.9em; color: #666; font-style: italic; margin-top: 10px; }}
         </style>
     </head>
     <body>
         <h1>Pinpoint</h1>
         <h3>Grab your Itinerary on Fingertips!</h3>
         <hr>
-        <h2>Itinerary</h2>
-        <div>{st.session_state.itinerary_text.replace('\n', '<br>')}</div>
+        <h2>Your Itinerary</h2>
+        <div style="background: #fff; padding: 10px;">
+            {st.session_state.itinerary_text.replace('\n', '<br>')}
+        </div>
         <hr>
         <h2>Logistics & Budget</h2>
-        <div>{st.session_state.transport_budget_text.replace('\n', '<br>')}</div>
+        <div style="background: #fff; padding: 10px;">
+            {st.session_state.transport_budget_text.replace('\n', '<br>')}
+        </div>
     </body>
     </html>
     """
