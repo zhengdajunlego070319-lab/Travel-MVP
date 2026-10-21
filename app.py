@@ -1,4 +1,5 @@
 import base64
+import time  # NEW: 引入時間套件來控制搜尋速度
 from geopy.geocoders import Nominatim
 import folium
 from PIL import Image
@@ -65,7 +66,6 @@ if uploaded_files:
 
   extra_details = st.text_input('Additional Hints (Optional):')
   
-  # UPDATED: Vague waiting time warning
   enable_map = st.checkbox('Generate Interactive Route Map (Note: May take a few minutes to load)', value=False)
 
   # --- PHASE 1: Generate Itinerary ---
@@ -82,7 +82,7 @@ if uploaded_files:
             3. Provide a beautifully formatted chronological itinerary divided clearly by days (e.g. Day 1, Day 2) using Markdown headings and bullet points.
             4. RECOMMENDATIONS: Suggest nearby restaurants or hidden gems ONLY IF they have exceptionally high historical recognition. If uncertain, leave blank. Include a 1-sentence reason and a disclaimer to check operating hours.
             
-            CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the key locations in chronological order.
+            CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the key EXACT OFFICIAL LANDMARK NAMES (e.g., Victoria Peak, Hong Kong Disneyland) in chronological order.
             Example:
             ===MAP_DATA===
             Location A, Location B, Location C
@@ -92,18 +92,18 @@ if uploaded_files:
         response = model.generate_content([prompt, *images])
         raw_text = response.text
 
-        # Clean Parsing: Separates Itinerary from Map Data without breaking Markdown
         if "===MAP_DATA===" in raw_text:
             parts = raw_text.split("===MAP_DATA===")
             st.session_state.itinerary_text = parts[0].strip()
             loc_string = parts[1].strip()
-            st.session_state.all_locations = [loc.strip() for loc in loc_string.split(',') if loc.strip()]
+            # 清理換行符號，確保只有乾淨的地名
+            st.session_state.all_locations = [loc.replace('\n', '').strip() for loc in loc_string.split(',') if loc.replace('\n', '').strip()]
         else:
             st.session_state.itinerary_text = raw_text.strip()
             st.session_state.all_locations = []
 
         st.session_state.phase1_done = True
-        st.session_state.phase2_done = False  # Reset phase 2
+        st.session_state.phase2_done = False  
         st.rerun()
 
       except Exception as e:
@@ -119,13 +119,15 @@ if st.session_state.phase1_done:
   if enable_map and st.session_state.all_locations:
     st.markdown('### Global Route Overview')
     with st.spinner('Plotting your chronological journey on the map...'):
-        geolocator = Nominatim(user_agent='pinpoint_app_v2')
+        geolocator = Nominatim(user_agent='pinpoint_app_v3')
         m = folium.Map(location=[22.3193, 114.1694], zoom_start=11)
         valid_coords = []
+        missing_locs = []
 
         for idx, loc in enumerate(st.session_state.all_locations):
             try:
-                location = geolocator.geocode(loc + ', Hong Kong', timeout=5)
+                # 加上 Hong Kong 限定範圍，提高準確率
+                location = geolocator.geocode(loc + ', Hong Kong', timeout=10)
                 if location:
                     coords = [location.latitude, location.longitude]
                     
@@ -137,9 +139,17 @@ if st.session_state.phase1_done:
                     ).add_to(m)
                     
                     valid_coords.append(coords)
-            except:
-                pass
+                else:
+                    missing_locs.append(loc)
+                
+                # 關鍵修復：強制暫停 1 秒，防止被伺服器封鎖
+                time.sleep(1)
+                
+            except Exception as e:
+                missing_locs.append(loc)
+                time.sleep(1)
 
+        # 畫出連線
         if len(valid_coords) > 1:
             folium.PolyLine(
                 valid_coords, color='#ff4b4b', weight=3, opacity=0.8
@@ -147,6 +157,10 @@ if st.session_state.phase1_done:
             m.fit_bounds(valid_coords)
 
         st_folium(m, width=700, height=450, key="global_route_map")
+        
+        # 友善提示找不到的地點
+        if missing_locs:
+            st.info(f"Note: Could not precisely map the following locations: {', '.join(missing_locs)}")
 
   # --- PHASE 2: Detailed Transport & Itemized Budget ---
   st.markdown('---')
