@@ -3,5 +3,4 @@ google-generativeai
 pillow
 folium
 streamlit-folium
-fpdf2
 geopy
