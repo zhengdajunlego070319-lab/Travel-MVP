@@ -8,9 +8,28 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 # --- 1. Branding & UI Setup ---
-st.set_page_config(page_title="Pinpoint", layout="centered")
+st.set_page_config(page_title="Pinpoint", layout="centered", initial_sidebar_state="collapsed")
 
-st.title("Pinpoint")
+# 注入全域自訂 CSS，保留模擬連結的樣式
+st.markdown("""
+<style>
+    .reportview-container {
+        background: #f7f9fc;
+    }
+    .mock-link-box {
+        background: #f0f2f6;
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-family: monospace;
+        color: #333;
+        border: 1px dashed #ccc;
+        text-align: center;
+        margin-bottom: 15px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("📍 Pinpoint")
 st.subheader("Grab your Itinerary on Fingertips!")
 st.markdown("---")
 
@@ -74,15 +93,19 @@ if uploaded_files:
 
       prompt = f"""
             You are a professional travel planner. Analyze the images and details: {extra_details}.
-            OUTPUT STRICTLY IN ENGLISH. DO NOT USE ANY EMOJIS OR EMOTICONS.
+            OUTPUT STRICTLY IN ENGLISH. 
+            
+            Visual Formatting Rule: 
+            Use ONLY these functional unicode icons for structure: 📍(location), 🕒(time), 🚶‍♂️(walking/transport), 🍽️(dining). 
+            ABSOLUTELY NO EXPRESSIVE EMOJIS (no smileys, faces, etc).
             
             Constraints:
-            1. Anchor ONLY on locations found in the images. Do not hallucinate external spots.
+            1. Anchor ONLY on locations found in the images.
             2. Apply these parameters: Duration: {duration_option}, Pace: {pace_option}, Window: {start_time} to {end_time}.
-            3. Provide a beautifully formatted chronological itinerary divided clearly by days using Markdown headings and bullet points.
-            4. EXTRA RECOMMENDATIONS: After the main itinerary, create a dedicated Markdown table titled "### Extra Recommendations". The table MUST have these columns: | Day | Spot Name | Type (Dining/Hidden Gem) | Reason to Visit |. ONLY include spots with exceptionally high historical recognition. Include a 1-sentence disclaimer below the table to check operating hours.
+            3. Provide a beautifully formatted chronological itinerary divided clearly by days using Markdown headings (###). 
+            4. EXTRA RECOMMENDATIONS: After the main itinerary, create a dedicated Markdown table titled "### Extra Recommendations". Columns: | Day | Spot Name | Type (Dining/Hidden Gem) | Reason to Visit |. ONLY include spots with exceptionally high historical recognition. Include a 1-sentence disclaimer below.
             
-            CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the key EXACT OFFICIAL LANDMARK NAMES (e.g., Victoria Peak, Hong Kong Disneyland) in chronological order.
+            CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the key EXACT OFFICIAL LANDMARK NAMES (e.g., Victoria Peak) in chronological order.
             Example:
             ===MAP_DATA===
             Location A, Location B, Location C
@@ -112,29 +135,29 @@ if uploaded_files:
 if st.session_state.phase1_done:
   st.markdown('---')
   st.markdown('### Your Pinpoint Itinerary')
-  st.markdown(st.session_state.itinerary_text)
+  
+  # FIX: 使用 Streamlit 原生 container 確保 Markdown 完美渲染
+  with st.container(border=True):
+      st.markdown(st.session_state.itinerary_text)
 
-  # NEW: Highly visible refinement section (No longer hidden in an expander)
   st.markdown('### Refine Your Itinerary')
-  user_feedback = st.text_area("Need adjustments? Tell us what to change (e.g., 'Make Day 1 more relaxed', 'Swap the museum for a park'):")
+  user_feedback = st.text_area("Need adjustments? Tell us what to change (e.g., 'Make Day 1 more relaxed'):")
   
   if st.button("Update Schedule"):
       with st.spinner("Adjusting your schedule based on your feedback..."):
           refine_prompt = f"""
-          You are a professional travel planner. Review the following existing itinerary and adjust it based on the user's specific feedback.
-          OUTPUT STRICTLY IN ENGLISH. DO NOT USE ANY EMOJIS OR EMOTICONS.
+          You are a professional travel planner. Review the existing itinerary and adjust it based on user feedback.
+          OUTPUT STRICTLY IN ENGLISH. Use ONLY functional icons (📍, 🕒, 🚶‍♂️, 🍽️). NO EXPRESSIVE EMOJIS.
           
           Existing Itinerary:
           {st.session_state.itinerary_text}
           
-          User Feedback for Adjustments:
+          Feedback:
           {user_feedback}
           
-          Constraints:
-          1. Modify the itinerary to reflect the user's feedback precisely.
-          2. Maintain the exact same formatting structure: Main chronological itinerary first, followed by the "### Extra Recommendations" table.
+          Constraints: Maintain the exact same formatting structure (Main itinerary + Extra Recommendations table).
           
-          CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the updated key EXACT OFFICIAL LANDMARK NAMES in chronological order.
+          CRITICAL: End with "===MAP_DATA===" followed by a comma-separated list of official landmark names.
           """
           try:
               refine_resp = model.generate_content([refine_prompt])
@@ -148,7 +171,6 @@ if st.session_state.phase1_done:
               else:
                   st.session_state.itinerary_text = raw_refine_text.strip()
               
-              # Reset Phase 2 because the itinerary changed
               st.session_state.phase2_done = False
               st.rerun()
           except Exception as e:
@@ -158,7 +180,7 @@ if st.session_state.phase1_done:
   if enable_map and st.session_state.all_locations:
     st.markdown('### Global Route Overview')
     with st.spinner('Plotting your chronological journey on the map...'):
-        geolocator = Nominatim(user_agent='pinpoint_app_v5')
+        geolocator = Nominatim(user_agent='pinpoint_app_v6')
         m = folium.Map(location=[22.3193, 114.1694], zoom_start=11)
         valid_coords = []
         missing_locs = []
@@ -168,34 +190,26 @@ if st.session_state.phase1_done:
                 location = geolocator.geocode(loc + ', Hong Kong', timeout=10)
                 if location:
                     coords = [location.latitude, location.longitude]
-                    
                     folium.Marker(
-                        coords,
-                        popup=loc,
-                        tooltip=f"Stop {idx + 1}: {loc}",
+                        coords, popup=loc, tooltip=f"Stop {idx + 1}: {loc}",
                         icon=folium.Icon(color='red', icon='info-sign')
                     ).add_to(m)
-                    
                     valid_coords.append(coords)
                 else:
                     missing_locs.append(loc)
-                
                 time.sleep(1)
-                
             except Exception as e:
                 missing_locs.append(loc)
                 time.sleep(1)
 
         if len(valid_coords) > 1:
-            folium.PolyLine(
-                valid_coords, color='#ff4b4b', weight=3, opacity=0.8
-            ).add_to(m)
+            folium.PolyLine(valid_coords, color='#ff4b4b', weight=3, opacity=0.8).add_to(m)
             m.fit_bounds(valid_coords)
 
         st_folium(m, width=700, height=450, key="global_route_map")
         
         if missing_locs:
-            st.info(f"Note: Could not precisely map the following locations: {', '.join(missing_locs)}")
+            st.info(f"Note: Could not precisely map: {', '.join(missing_locs)}")
 
   # --- PHASE 2: Detailed Transport & Itemized Budget ---
   st.markdown('---')
@@ -206,16 +220,13 @@ if st.session_state.phase1_done:
                 Based on this itinerary:
                 {st.session_state.itinerary_text}
 
-                OUTPUT STRICTLY IN ENGLISH. DO NOT USE ANY EMOJIS.
+                OUTPUT STRICTLY IN ENGLISH. Use ONLY functional icons (📍, 🕒, 🚶‍♂️, 🍽️). NO EXPRESSIVE EMOJIS.
 
                 Requirements:
-                1. **Detailed Transport Guide**: First, provide specific, realistic point-to-point public transit directions between each location. Mimic real-world map logic (e.g., "Take MTR Tsuen Wan Line from X to Y, then take Bus 973"). Include estimated travel times.
-                2. **Itemized Budget Breakdown**: Under a new heading, provide a highly granular cost breakdown in HKD.
-                   - Transport: List the estimated cost for EACH specific ride.
-                   - Dining: Estimate the cost for EACH specific meal using a reasonable range (e.g., $80 - $150), adjusting for a {pace_option} travel pace.
-                   - Attractions: List specific admission fees if applicable.
-                3. **Total Calculation**: Conclude with a clear "Total Estimated Budget Range" that sums up all the itemized costs.
-                4. Use clear Markdown headings (`### Transport Guide` and `### Itemized Budget`) and bullet points for readability. Do not use a single compressed table.
+                1. **Detailed Transport Guide**: Point-to-point public transit directions.
+                2. **Itemized Budget Breakdown**: Highly granular cost breakdown in HKD (Transport, Dining ranges for {pace_option} pace, Attractions).
+                3. **Total Calculation**: A clear "Total Estimated Budget Range".
+                4. Use clear Markdown headings and bullet points.
                 """
         try:
           budget_resp = model.generate_content([budget_prompt])
@@ -225,43 +236,97 @@ if st.session_state.phase1_done:
         except Exception as e:
           st.error(f'Error: {str(e)}')
 
-# --- Render Phase 2 Details & HTML Export ---
+# --- Render Phase 2 Details & Premium HTML Export ---
 if st.session_state.phase2_done:
   st.markdown('### Logistics & Budget Breakdown')
-  st.markdown(st.session_state.transport_budget_text)
+  
+  # FIX: 確保 Markdown 完美渲染的預算卡片
+  with st.container(border=True):
+      st.markdown(st.session_state.transport_budget_text)
 
   st.markdown('---')
-  st.markdown('### Export & Share')
+  st.markdown('### 🚀 Export & Share (Instagram-Ready)')
+  
+  # Simulated Shareable Link UI
+  st.markdown('<div class="mock-link-box">🔗 https://pinpoint.app/share/hk-trip-8f2a</div>', unsafe_allow_html=True)
+  st.caption("*(MVP Demo: Copy this link to share a web version of your itinerary with friends - no login required!)*")
 
-  # HTML Export Package
+  # PREMIUM HTML Export Package with embedded JS Markdown parser
   full_html = f"""
-    <html>
+    <!DOCTYPE html>
+    <html lang="en">
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Pinpoint Itinerary</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+        <!-- 引入 marked.js 即時解析 Markdown -->
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
         <style>
-            body {{ font-family: Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; line-height: 1.6; color: #333; }}
-            h1, h2, h3 {{ color: #111; }}
-            hr {{ border: 0; height: 1px; background: #ccc; margin: 20px 0; }}
-            .content-box {{ background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #eee; white-space: pre-wrap; font-family: inherit; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; }}
-            th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
-            th {{ background-color: #f2f2f2; font-weight: bold; }}
+            body {{ 
+                font-family: 'Inter', sans-serif; 
+                background: #f7f9fc; 
+                margin: 0; 
+                padding: 20px; 
+                color: #2d3748;
+                display: flex;
+                justify-content: center;
+            }}
+            .story-container {{
+                background: white;
+                max-width: 420px;
+                width: 100%;
+                padding: 30px 20px;
+                border-radius: 24px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            }}
+            .header {{ text-align: center; margin-bottom: 25px; }}
+            h1 {{ color: #ff4b4b; margin: 0; font-size: 28px; font-weight: 700; }}
+            h3 {{ color: #718096; margin: 5px 0 20px 0; font-size: 14px; font-weight: 400; }}
+            .content-card h3 {{ font-size: 18px; color: #1a202c; border-bottom: 2px solid #edf2f7; padding-bottom: 8px; margin-top: 25px; }}
+            .content-card ul {{ padding-left: 20px; }}
+            .content-card li {{ margin-bottom: 8px; }}
+            .content-card {{ 
+                background: #fdfdfd; 
+                padding: 20px; 
+                border-radius: 12px; 
+                border: 1px solid #e2e8f0; 
+                line-height: 1.6;
+                font-size: 14px;
+            }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }}
+            th, td {{ border: 1px solid #e2e8f0; padding: 10px; text-align: left; }}
+            th {{ background-color: #f7fafc; font-weight: 600; color: #4a5568; }}
         </style>
     </head>
     <body>
-        <h1>Pinpoint</h1>
-        <h3>Grab your Itinerary on Fingertips!</h3>
-        <hr>
-        <h2>Your Itinerary</h2>
-        <div class="content-box">{st.session_state.itinerary_text}</div>
-        <hr>
-        <h2>Logistics & Budget</h2>
-        <div class="content-box">{st.session_state.transport_budget_text}</div>
+        <div class="story-container">
+            <div class="header">
+                <h1>📍 Pinpoint</h1>
+                <h3>Grab your Itinerary on Fingertips!</h3>
+            </div>
+            
+            <!-- 隱藏的原始 Markdown 數據 -->
+            <div id="raw-itinerary" style="display:none;">{st.session_state.itinerary_text}</div>
+            <div id="raw-budget" style="display:none;">{st.session_state.transport_budget_text}</div>
+            
+            <!-- 渲染後的 HTML 容器 -->
+            <div class="content-card" id="rendered-itinerary"></div>
+            <br>
+            <div class="content-card" id="rendered-budget"></div>
+        </div>
+
+        <script>
+            // 讀取並解析 Markdown
+            document.getElementById('rendered-itinerary').innerHTML = marked.parse(document.getElementById('raw-itinerary').textContent);
+            document.getElementById('rendered-budget').innerHTML = marked.parse(document.getElementById('raw-budget').textContent);
+        </script>
     </body>
     </html>
     """
   b64_html = base64.b64encode(full_html.encode()).decode()
 
-  href_html = f'<a href="data:text/html;base64,{b64_html}" download="Pinpoint_Itinerary.html" style="text-decoration: none; padding: 14px 28px; background-color: #ff4b4b; color: white; font-weight: bold; border-radius: 6px; display: block; text-align: center; font-size: 16px;">Download Interactive HTML Itinerary</a>'
+  href_html = f'<a href="data:text/html;base64,{b64_html}" download="Pinpoint_Story_Format.html" style="text-decoration: none; padding: 16px 20px; background-color: #111; color: white; font-weight: bold; border-radius: 12px; display: block; text-align: center; font-size: 16px; transition: 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">📱 Download Instagram-Ready Image Format (HTML)</a>'
 
   st.markdown(href_html, unsafe_allow_html=True)
+  st.caption("*(Open the downloaded file on your phone or browser, and it will be perfectly proportioned for an Instagram Story screenshot!)*")
