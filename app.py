@@ -10,21 +10,11 @@ from streamlit_folium import st_folium
 # --- 1. Branding & UI Setup ---
 st.set_page_config(page_title="Pinpoint", layout="centered", initial_sidebar_state="collapsed")
 
-# 注入全域自訂 CSS，保留模擬連結的樣式
+# 注入全域自訂 CSS (已清理不需要的假連結樣式)
 st.markdown("""
 <style>
     .reportview-container {
         background: #f7f9fc;
-    }
-    .mock-link-box {
-        background: #f0f2f6;
-        padding: 12px 16px;
-        border-radius: 8px;
-        font-family: monospace;
-        color: #333;
-        border: 1px dashed #ccc;
-        text-align: center;
-        margin-bottom: 15px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -136,7 +126,6 @@ if st.session_state.phase1_done:
   st.markdown('---')
   st.markdown('### Your Pinpoint Itinerary')
   
-  # FIX: 使用 Streamlit 原生 container 確保 Markdown 完美渲染
   with st.container(border=True):
       st.markdown(st.session_state.itinerary_text)
 
@@ -180,7 +169,7 @@ if st.session_state.phase1_done:
   if enable_map and st.session_state.all_locations:
     st.markdown('### Global Route Overview')
     with st.spinner('Plotting your chronological journey on the map...'):
-        geolocator = Nominatim(user_agent='pinpoint_app_v6')
+        geolocator = Nominatim(user_agent='pinpoint_app_v7')
         m = folium.Map(location=[22.3193, 114.1694], zoom_start=11)
         valid_coords = []
         missing_locs = []
@@ -240,16 +229,11 @@ if st.session_state.phase1_done:
 if st.session_state.phase2_done:
   st.markdown('### Logistics & Budget Breakdown')
   
-  # FIX: 確保 Markdown 完美渲染的預算卡片
   with st.container(border=True):
       st.markdown(st.session_state.transport_budget_text)
 
   st.markdown('---')
-  st.markdown('### 🚀 Export & Share (Instagram-Ready)')
-  
-  # Simulated Shareable Link UI
-  st.markdown('<div class="mock-link-box">🔗 https://pinpoint.app/share/hk-trip-8f2a</div>', unsafe_allow_html=True)
-  st.caption("*(MVP Demo: Copy this link to share a web version of your itinerary with friends - no login required!)*")
+  st.markdown('### Export & Share (Instagram-Ready)')
 
   # PREMIUM HTML Export Package with embedded JS Markdown parser
   full_html = f"""
@@ -326,7 +310,7 @@ if st.session_state.phase2_done:
     """
   b64_html = base64.b64encode(full_html.encode()).decode()
 
-  href_html = f'<a href="data:text/html;base64,{b64_html}" download="Pinpoint_Story_Format.html" style="text-decoration: none; padding: 16px 20px; background-color: #111; color: white; font-weight: bold; border-radius: 12px; display: block; text-align: center; font-size: 16px; transition: 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">📱 Download Instagram-Ready Image Format (HTML)</a>'
+  href_html = f'<a href="data:text/html;base64,{b64_html}" download="Pinpoint_Story_Format.html" style="text-decoration: none; padding: 16px 20px; background-color: #111; color: white; font-weight: bold; border-radius: 12px; display: block; text-align: center; font-size: 16px; transition: 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">Download Instagram-Ready Image Format (HTML)</a>'
 
   st.markdown(href_html, unsafe_allow_html=True)
   st.caption("*(Open the downloaded file on your phone or browser, and it will be perfectly proportioned for an Instagram Story screenshot!)*")
