@@ -35,6 +35,9 @@ if 'detail_itinerary_id' not in st.session_state:
 if 'welcome_shown' not in st.session_state:
     st.session_state.welcome_shown = False
 
+if 'publish_success_state' not in st.session_state:
+    st.session_state.publish_success_state = False
+
 # --- Welcome Splash Screen ---
 if not st.session_state.welcome_shown:
     st.title("📍 Pinpoint")
@@ -303,6 +306,7 @@ elif st.session_state.current_view == 'home':
                             st.session_state.all_locations = []
                         st.session_state.phase1_done = True
                         st.session_state.phase2_done = False  
+                        st.session_state.publish_success_state = False
                         st.rerun()
                     except Exception as e:
                         st.error(f'Generation Error: {str(e)}')
@@ -334,6 +338,7 @@ elif st.session_state.current_view == 'home':
                         else:
                             st.session_state.itinerary_text = raw_refine_text.strip()
                         st.session_state.phase2_done = False
+                        st.session_state.publish_success_state = False
                         st.rerun()
                     except Exception as e:
                         st.error(f'Refinement Error: {str(e)}')
@@ -372,6 +377,7 @@ elif st.session_state.current_view == 'home':
                             budget_resp = model.generate_content([budget_prompt])
                             st.session_state.transport_budget_text = budget_resp.text
                             st.session_state.phase2_done = True
+                            st.session_state.publish_success_state = False
                             st.rerun()
                         except Exception as e:
                             st.error(f'Error: {str(e)}')
@@ -436,21 +442,27 @@ elif st.session_state.current_view == 'home':
                 if not post_title:
                     st.warning("Please enter a title before publishing.")
                 else:
-                    db_df_current = load_itineraries()
-                    new_id = str(uuid.uuid4())[:8]
-                    new_row = pd.DataFrame([{
-                        "ID": new_id,
-                        "Title": post_title,
-                        "Pace": pace_option,
-                        "Duration": duration_option,
-                        "Itinerary": st.session_state.itinerary_text,
-                        "Budget": st.session_state.transport_budget_text,
-                        "Liked_By": "" 
-                    }])
-                    updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
-                    if save_itineraries(updated_df):
-                        # 核心修改：發佈成功後，直接將視圖切換回探索大廳，並重置創建進度
-                        st.session_state.current_view = 'home'
-                        st.session_state.phase1_done = False
-                        st.session_state.phase2_done = False
-                        st.rerun()
+                    with st.spinner("Publishing to cloud database..."):
+                        db_df_current = load_itineraries()
+                        new_id = str(uuid.uuid4())[:8]
+                        new_row = pd.DataFrame([{
+                            "ID": new_id,
+                            "Title": post_title,
+                            "Pace": pace_option,
+                            "Duration": duration_option,
+                            "Itinerary": st.session_state.itinerary_text,
+                            "Budget": st.session_state.transport_budget_text,
+                            "Liked_By": "" 
+                        }])
+                        updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
+                        if save_itineraries(updated_df):
+                            st.session_state.publish_success_state = True
+
+            # 如果發佈成功，直接在按鈕下方原地顯示成功提示與新按鈕！
+            if st.session_state.publish_success_state:
+                st.success("🎉 Published successfully! Your itinerary is now live in the community.")
+                if st.button("✨ Create Another Itinerary"):
+                    st.session_state.publish_success_state = False
+                    st.session_state.phase1_done = False
+                    st.session_state.phase2_done = False
+                    st.rerun()
