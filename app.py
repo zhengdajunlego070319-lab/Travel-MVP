@@ -38,20 +38,26 @@ if 'welcome_shown' not in st.session_state:
 if 'publish_success_msg' not in st.session_state:
     st.session_state.publish_success_msg = False
 
-# --- Welcome Splash Screen ---
+# --- Welcome Splash Screen (Updated Clean Guidelines) ---
 if not st.session_state.welcome_shown:
     st.title("📍 Pinpoint")
     st.markdown('<div class="welcome-card">', unsafe_allow_html=True)
     st.markdown("## Welcome to Pinpoint 📍")
-    st.markdown("*Grab your itinerary on fingertips! Build perfect trips and join the community.*")
+    st.markdown("*Grab your itinerary on fingertips!* Whether you are looking for instant inspiration or crafting the perfect trip, here is your quick guide to mastering the platform.")
     st.markdown("""
     ### 🌍 Explore the Community
-    *   **Discover & Interact:** Browse trips, leave comments, and toggle **❤️ Likes**.
-    *   **Find Your Vibe:** Filter itineraries by travel pace.
+    *   **Discover & Filter:** Browse itineraries and sort trips by travel pace (Relaxed, Balanced, or Packed).
+    *   **Interactive Engagement:** View detailed routes, read comments, and toggle **❤️ Likes** to support your favorite trips.
 
     ### ✨ Create Your Masterpiece
-    *   **Visual Anchor:** Upload photos to build your itinerary.
-    *   **Publish & Share:** Export HTML files for IG stories, or publish your trip to the public database!
+    *   **Visual AI Generation:** Upload photos to anchor your custom itinerary.
+    *   **Smart Refinement:** Easily tweak your schedule using conversational feedback.
+    *   **Interactive Mapping:** Automatically plot your chronological journey on an interactive route map.
+
+    ### 💰 Logistics, Export & Share
+    *   **Budget Breakdown:** Generate granular, point-to-point transit guides and HKD cost estimates.
+    *   **Social Export:** Download a mobile-optimized HTML file designed for Instagram Stories.
+    *   **Community Publishing:** Share your custom itineraries to the public cloud database for others to discover.
     """)
     st.markdown('</div><br>', unsafe_allow_html=True)
     if st.button("Got it! Let's Go 🚀", type="primary", use_container_width=True):
@@ -246,7 +252,6 @@ elif st.session_state.current_view == 'home':
 
     # --- TAB 2: CREATE ITINERARY ---
     with tab_create:
-        # 如果剛才發佈成功，直接在分頁最上方顯示大大的成功橫幅！
         if st.session_state.publish_success_msg:
             st.success("🎉 Your itinerary was published successfully to the community!")
             if st.button("🔄 Create Another Itinerary"):
@@ -461,6 +466,6 @@ elif st.session_state.current_view == 'home':
                         updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
                         if save_itineraries(updated_df):
                             st.session_state.publish_success_msg = True
-                            st.balloons() # 放慶祝氣球，絕對看得到！
+                            st.balloons()
                             time.sleep(0.5)
                             st.rerun()
