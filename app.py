@@ -246,6 +246,16 @@ elif st.session_state.current_view == 'home':
 
     # --- TAB 2: CREATE ITINERARY ---
     with tab_create:
+        # 如果剛才發佈成功，直接在分頁最上方顯示大大的成功橫幅！
+        if st.session_state.publish_success_msg:
+            st.success("🎉 Your itinerary was published successfully to the community!")
+            if st.button("🔄 Create Another Itinerary"):
+                st.session_state.publish_success_msg = False
+                st.session_state.phase1_done = False
+                st.session_state.phase2_done = False
+                st.rerun()
+            st.markdown("---")
+
         if 'phase1_done' not in st.session_state: st.session_state.phase1_done = False
         if 'itinerary_text' not in st.session_state: st.session_state.itinerary_text = ''
         if 'all_locations' not in st.session_state: st.session_state.all_locations = []
@@ -436,7 +446,6 @@ elif st.session_state.current_view == 'home':
                 if not post_title:
                     st.warning("Please enter a title before publishing.")
                 else:
-                    # 使用 st.spinner 完美呈現 Loading 提示
                     with st.spinner("Publishing your itinerary to the cloud database..."):
                         db_df_current = load_itineraries()
                         new_id = str(uuid.uuid4())[:8]
@@ -452,9 +461,6 @@ elif st.session_state.current_view == 'home':
                         updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
                         if save_itineraries(updated_df):
                             st.session_state.publish_success_msg = True
-                            time.sleep(0.5) # 稍微停頓讓 Loading 畫面更有感
+                            st.balloons() # 放慶祝氣球，絕對看得到！
+                            time.sleep(0.5)
                             st.rerun()
-
-            # 長駐在頁面上的成功提示文字
-            if st.session_state.publish_success_msg:
-                st.success("🎉 Published successfully! Check it out in the Explore tab.")
