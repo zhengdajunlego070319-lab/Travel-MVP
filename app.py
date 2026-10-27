@@ -34,32 +34,35 @@ except KeyError:
 genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-3.1-flash-lite')
 
-# --- Database Helper Functions ---
-@st.cache_data(ttl=5)
+# --- TRUE CLOUD DATABASE FUNCTIONS ---
+@st.cache_data(ttl=5) # 5秒刷新一次，確保看到最新的社群動態
 def load_data():
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(worksheet="Sheet1")
+        # 確保即使表格是空的，也能回傳正確的欄位結構
         if df.empty or 'ID' not in df.columns:
             return pd.DataFrame(columns=["ID", "Title", "Pace", "Duration", "Itinerary", "Budget", "Likes"])
         return df
     except Exception as e:
+        st.error(f"Database Read Error: {e}")
         return None
 
 def save_data(df):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         conn.update(worksheet="Sheet1", data=df)
-        st.cache_data.clear()
+        st.cache_data.clear() # 清除快取，強制下次讀取最新資料
         return True
-    except:
+    except Exception as e:
+        st.error(f"Database Write Error: {e}")
         return False
 
 # --- 3. App Architecture: TABS ---
 tab_explore, tab_create = st.tabs(["🌍 Explore Community", "✨ Create Itinerary"])
 
 # ==========================================
-# TAB 1: EXPLORE COMMUNITY
+# TAB 1: EXPLORE COMMUNITY (REAL CLOUD SYNC)
 # ==========================================
 with tab_explore:
     st.markdown("### Discover & Get Inspired")
@@ -68,10 +71,11 @@ with tab_explore:
     db_df = load_data()
     
     if db_df is None:
-        st.warning("⚠️ Community Database is not connected yet. Check your Streamlit Secrets.")
+        st.warning("⚠️ Community Database is not connected yet. Please check your Google Service Account Secrets.")
     elif db_df.empty:
-        st.info("The community is currently empty. Be the first to publish an itinerary!")
+        st.info("The community is currently empty. Go to 'Create Itinerary' and be the first to publish!")
     else:
+        # 清洗資料，確保 Likes 是數字
         db_df['Likes'] = pd.to_numeric(db_df['Likes'], errors='coerce').fillna(0).astype(int)
         
         col_f1, col_f2 = st.columns(2)
@@ -81,6 +85,7 @@ with tab_explore:
         if filter_pace != "All":
             filtered_df = filtered_df[filtered_df['Pace'] == filter_pace]
             
+        # 依照讚好數排序
         filtered_df = filtered_df.sort_values(by="Likes", ascending=False)
         
         if filtered_df.empty:
@@ -96,6 +101,7 @@ with tab_explore:
                         st.caption(f"⏱️ {row['Duration']} | 🚶‍♂️ Pace: {row['Pace']}")
                     
                     with cols_header[1]:
+                        # 點讚寫入真實資料庫
                         if st.button(f"❤️ {row['Likes']} Likes", key=f"like_{row['ID']}"):
                             db_df.loc[db_df['ID'] == row['ID'], 'Likes'] += 1
                             if save_data(db_df):
@@ -109,7 +115,7 @@ with tab_explore:
                         st.markdown(row['Budget'])
 
 # ==========================================
-# TAB 2: CREATE ITINERARY (100% 完整保留原有功能)
+# TAB 2: CREATE ITINERARY (100% Retained)
 # ==========================================
 with tab_create:
     if 'phase1_done' not in st.session_state: st.session_state.phase1_done = False
@@ -141,7 +147,7 @@ with tab_create:
         extra_details = st.text_input('Additional Hints (Optional):')
         enable_map = st.checkbox('Generate Interactive Route Map (Note: May take a few minutes to load)', value=False)
 
-        # --- PHASE 1: Generate Itinerary (完整 Prompt) ---
+        # --- PHASE 1 ---
         if st.button('Generate Custom Itinerary', type='primary', use_container_width=True):
             with st.spinner('Analyzing and building your schedule...'):
                 prompt = f"""
@@ -150,7 +156,7 @@ with tab_create:
                 
                 Visual Formatting Rule: 
                 Use ONLY these functional unicode icons for structure: 📍(location), 🕒(time), 🚶‍♂️(walking/transport), 🍽️(dining). 
-                ABSOLUTELY NO EXPRESSIVE EMOJIS (no smileys, faces, etc).
+                ABSOLUTELY NO EXPRESSIVE EMOJIS.
                 
                 Constraints:
                 1. Anchor ONLY on locations found in the images.
@@ -159,9 +165,6 @@ with tab_create:
                 4. EXTRA RECOMMENDATIONS: After the main itinerary, create a dedicated Markdown table titled "### Extra Recommendations". Columns: | Day | Spot Name | Type (Dining/Hidden Gem) | Reason to Visit |. ONLY include spots with exceptionally high historical recognition. Include a 1-sentence disclaimer below.
                 
                 CRITICAL: At the absolute end of your response, you MUST add a separator "===MAP_DATA===" on a new line, followed by a single comma-separated list of the key EXACT OFFICIAL LANDMARK NAMES (e.g., Victoria Peak) in chronological order.
-                Example:
-                ===MAP_DATA===
-                Location A, Location B, Location C
                 """
                 try:
                     response = model.generate_content([prompt, *images])
@@ -179,7 +182,7 @@ with tab_create:
                 except Exception as e:
                     st.error(f'Generation Error: {str(e)}')
 
-    # --- PHASE 1 Output & Refinement (完整功能) ---
+    # --- PHASE 1 Output & Refinement ---
     if st.session_state.phase1_done:
         st.markdown('---')
         st.markdown('### Your Pinpoint Itinerary')
@@ -188,7 +191,7 @@ with tab_create:
             st.markdown(st.session_state.itinerary_text)
 
         st.markdown('### Refine Your Itinerary')
-        user_feedback = st.text_area("Need adjustments? Tell us what to change (e.g., 'Make Day 1 more relaxed'):")
+        user_feedback = st.text_area("Need adjustments? Tell us what to change:")
         
         if st.button("Update Schedule"):
             with st.spinner("Adjusting your schedule based on your feedback..."):
@@ -202,8 +205,7 @@ with tab_create:
                 Feedback:
                 {user_feedback}
                 
-                Constraints: Maintain the exact same formatting structure (Main itinerary + Extra Recommendations table).
-                
+                Constraints: Maintain the exact same formatting structure.
                 CRITICAL: End with "===MAP_DATA===" followed by a comma-separated list of official landmark names.
                 """
                 try:
@@ -226,7 +228,7 @@ with tab_create:
         if enable_map and st.session_state.all_locations:
             st.markdown('### Global Route Overview')
             with st.spinner('Plotting your chronological journey on the map...'):
-                geolocator = Nominatim(user_agent='pinpoint_app_v9')
+                geolocator = Nominatim(user_agent='pinpoint_app_v11')
                 m = folium.Map(location=[22.3193, 114.1694], zoom_start=11)
                 valid_coords = []
                 missing_locs = []
@@ -254,7 +256,7 @@ with tab_create:
                 if missing_locs:
                     st.info(f"Note: Could not precisely map: {', '.join(missing_locs)}")
 
-        # --- PHASE 2: Detailed Transport & Itemized Budget (完整 Prompt) ---
+        # --- PHASE 2 ---
         st.markdown('---')
         if not st.session_state.phase2_done:
             if st.button('Get Transport & Budget Breakdown', type='primary', use_container_width=True):
@@ -267,7 +269,7 @@ with tab_create:
 
                     Requirements:
                     1. **Detailed Transport Guide**: Point-to-point public transit directions.
-                    2. **Itemized Budget Breakdown**: Highly granular cost breakdown in HKD (Transport, Dining ranges for {pace_option} pace, Attractions).
+                    2. **Itemized Budget Breakdown**: Highly granular cost breakdown in HKD.
                     3. **Total Calculation**: A clear "Total Estimated Budget Range".
                     4. Use clear Markdown headings and bullet points.
                     """
@@ -279,7 +281,7 @@ with tab_create:
                     except Exception as e:
                         st.error(f'Error: {str(e)}')
 
-    # --- PHASE 2 Output, Premium HTML Export & Publish ---
+    # --- PHASE 2 Output & REAL PUBLISH TO COMMUNITY ---
     if st.session_state.phase2_done:
         st.markdown('### Logistics & Budget Breakdown')
         with st.container(border=True):
@@ -288,7 +290,6 @@ with tab_create:
         st.markdown('---')
         st.markdown('### 🚀 Export (Instagram-Ready)')
         
-        # Premium HTML Export 
         full_html = f"""
         <!DOCTYPE html>
         <html lang="en">
@@ -333,9 +334,8 @@ with tab_create:
         b64_html = base64.b64encode(full_html.encode()).decode()
         href_html = f'<a href="data:text/html;base64,{b64_html}" download="Pinpoint_Story.html" style="text-decoration: none; padding: 16px 20px; background-color: #111; color: white; font-weight: bold; border-radius: 12px; display: block; text-align: center; font-size: 16px;">Download Image Format (HTML)</a>'
         st.markdown(href_html, unsafe_allow_html=True)
-        st.caption("*(Open the downloaded file on your phone or browser, and it will be perfectly proportioned for an Instagram Story screenshot!)*")
 
-        # --- Publish to Database ---
+        # --- REAL Publish to Database ---
         st.markdown('---')
         st.markdown('### 🌐 Publish to Community')
         st.caption("Share your masterpiece! Give it a catchy title so others can discover it.")
@@ -359,6 +359,7 @@ with tab_create:
                         "Likes": 0
                     }])
                     
+                    # 將新資料寫入真實的 Google Sheets
                     updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
                     if save_data(updated_df):
                         st.success("🎉 Published successfully! Check it out in the Explore tab.")
