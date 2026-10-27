@@ -35,6 +35,9 @@ if 'detail_itinerary_id' not in st.session_state:
 if 'welcome_shown' not in st.session_state:
     st.session_state.welcome_shown = False
 
+if 'publish_success_flag' not in st.session_state:
+    st.session_state.publish_success_flag = False
+
 # --- Welcome Splash Screen ---
 if not st.session_state.welcome_shown:
     st.title("📍 Pinpoint")
@@ -297,6 +300,7 @@ elif st.session_state.current_view == 'home':
                             st.session_state.all_locations = []
                         st.session_state.phase1_done = True
                         st.session_state.phase2_done = False  
+                        st.session_state.publish_success_flag = False # 新生成時重置提示狀態
                         st.rerun()
                     except Exception as e:
                         st.error(f'Generation Error: {str(e)}')
@@ -328,6 +332,7 @@ elif st.session_state.current_view == 'home':
                         else:
                             st.session_state.itinerary_text = raw_refine_text.strip()
                         st.session_state.phase2_done = False
+                        st.session_state.publish_success_flag = False
                         st.rerun()
                     except Exception as e:
                         st.error(f'Refinement Error: {str(e)}')
@@ -366,6 +371,7 @@ elif st.session_state.current_view == 'home':
                             budget_resp = model.generate_content([budget_prompt])
                             st.session_state.transport_budget_text = budget_resp.text
                             st.session_state.phase2_done = True
+                            st.session_state.publish_success_flag = False
                             st.rerun()
                         except Exception as e:
                             st.error(f'Error: {str(e)}')
@@ -443,4 +449,9 @@ elif st.session_state.current_view == 'home':
                     }])
                     updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
                     if save_itineraries(updated_df):
-                        st.success("🎉 Published successfully! Check it out in the Explore tab.")
+                        st.session_state.publish_success_flag = True
+                        st.rerun()
+
+            # 透過 Session State 標記確保提示訊息穩固留在畫面上有感回饋
+            if st.session_state.publish_success_flag:
+                st.success("🎉 Published successfully! Check it out in the Explore tab.")
