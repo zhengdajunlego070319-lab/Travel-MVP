@@ -35,9 +35,6 @@ if 'detail_itinerary_id' not in st.session_state:
 if 'welcome_shown' not in st.session_state:
     st.session_state.welcome_shown = False
 
-if 'publish_success_msg' not in st.session_state:
-    st.session_state.publish_success_msg = False
-
 # --- Welcome Splash Screen ---
 if not st.session_state.welcome_shown:
     st.title("📍 Pinpoint")
@@ -67,14 +64,6 @@ if not st.session_state.welcome_shown:
 
 st.title("📍 Pinpoint")
 st.subheader("Grab your Itinerary on Fingertips!")
-
-# ==========================================
-# 🎯 頁面頂端全域發佈成功通知 (Top Banner)
-# ==========================================
-if st.session_state.publish_success_msg:
-    st.success("🎉 Published successfully! Your itinerary is now live in the community.")
-    st.session_state.publish_success_msg = False # 讀取後立刻清空，避免重複顯示
-
 st.markdown("---")
 
 # --- 3. API & TRUE CLOUD DB SETUP ---
@@ -460,5 +449,8 @@ elif st.session_state.current_view == 'home':
                     }])
                     updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
                     if save_itineraries(updated_df):
-                        st.session_state.publish_success_msg = True
+                        # 核心修改：發佈成功後，直接將視圖切換回探索大廳，並重置創建進度
+                        st.session_state.current_view = 'home'
+                        st.session_state.phase1_done = False
+                        st.session_state.phase2_done = False
                         st.rerun()
