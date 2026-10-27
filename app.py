@@ -35,9 +35,6 @@ if 'detail_itinerary_id' not in st.session_state:
 if 'welcome_shown' not in st.session_state:
     st.session_state.welcome_shown = False
 
-if 'publish_success_flag' not in st.session_state:
-    st.session_state.publish_success_flag = False
-
 # --- Welcome Splash Screen ---
 if not st.session_state.welcome_shown:
     st.title("📍 Pinpoint")
@@ -197,7 +194,7 @@ if st.session_state.current_view == 'detail':
                     }])
                     df_com = pd.concat([df_com, new_comment], ignore_index=True)
                     save_comments(df_com)
-                    st.success("Comment posted!")
+                    st.toast("Comment posted successfully!", icon="✅")
                     st.rerun()
 
 # ==========================================
@@ -300,7 +297,6 @@ elif st.session_state.current_view == 'home':
                             st.session_state.all_locations = []
                         st.session_state.phase1_done = True
                         st.session_state.phase2_done = False  
-                        st.session_state.publish_success_flag = False # 新生成時重置提示狀態
                         st.rerun()
                     except Exception as e:
                         st.error(f'Generation Error: {str(e)}')
@@ -332,7 +328,6 @@ elif st.session_state.current_view == 'home':
                         else:
                             st.session_state.itinerary_text = raw_refine_text.strip()
                         st.session_state.phase2_done = False
-                        st.session_state.publish_success_flag = False
                         st.rerun()
                     except Exception as e:
                         st.error(f'Refinement Error: {str(e)}')
@@ -371,7 +366,6 @@ elif st.session_state.current_view == 'home':
                             budget_resp = model.generate_content([budget_prompt])
                             st.session_state.transport_budget_text = budget_resp.text
                             st.session_state.phase2_done = True
-                            st.session_state.publish_success_flag = False
                             st.rerun()
                         except Exception as e:
                             st.error(f'Error: {str(e)}')
@@ -379,79 +373,4 @@ elif st.session_state.current_view == 'home':
         if st.session_state.phase2_done:
             st.markdown('### Logistics & Budget Breakdown')
             with st.container(border=True):
-                st.markdown(st.session_state.transport_budget_text)
-
-            st.markdown('---')
-            st.markdown('### 🚀 Export (Instagram-Ready)')
-            full_html = f"""
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Pinpoint Itinerary</title>
-                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-                <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-                <style>
-                    body {{ font-family: 'Inter', sans-serif; background: #f7f9fc; margin: 0; padding: 20px; display: flex; justify-content: center; }}
-                    .story-container {{ background: white; max-width: 420px; width: 100%; padding: 30px 20px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }}
-                    .header {{ text-align: center; margin-bottom: 25px; }}
-                    h1 {{ color: #ff4b4b; margin: 0; font-size: 28px; font-weight: 700; }}
-                    h3 {{ color: #718096; margin: 5px 0 20px 0; font-size: 14px; font-weight: 400; }}
-                    .content-card h3 {{ font-size: 18px; color: #1a202c; border-bottom: 2px solid #edf2f7; padding-bottom: 8px; margin-top: 25px; }}
-                    .content-card {{ background: #fdfdfd; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; line-height: 1.6; font-size: 14px; }}
-                    table {{ width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }}
-                    th, td {{ border: 1px solid #e2e8f0; padding: 10px; text-align: left; }}
-                    th {{ background-color: #f7fafc; font-weight: 600; color: #4a5568; }}
-                </style>
-            </head>
-            <body>
-                <div class="story-container">
-                    <div class="header">
-                        <h1>📍 Pinpoint</h1>
-                        <h3>Grab your Itinerary on Fingertips!</h3>
-                    </div>
-                    <div id="raw-itinerary" style="display:none;">{st.session_state.itinerary_text}</div>
-                    <div id="raw-budget" style="display:none;">{st.session_state.transport_budget_text}</div>
-                    <div class="content-card" id="rendered-itinerary"></div><br>
-                    <div class="content-card" id="rendered-budget"></div>
-                </div>
-                <script>
-                    document.getElementById('rendered-itinerary').innerHTML = marked.parse(document.getElementById('raw-itinerary').textContent);
-                    document.getElementById('rendered-budget').innerHTML = marked.parse(document.getElementById('raw-budget').textContent);
-                </script>
-            </body>
-            </html>
-            """
-            b64_html = base64.b64encode(full_html.encode()).decode()
-            href_html = f'<a href="data:text/html;base64,{b64_html}" download="Pinpoint_Story.html" style="text-decoration: none; padding: 16px 20px; background-color: #111; color: white; font-weight: bold; border-radius: 12px; display: block; text-align: center;">Download Image Format (HTML)</a>'
-            st.markdown(href_html, unsafe_allow_html=True)
-
-            st.markdown('---')
-            st.markdown('### 🌐 Publish to Community')
-            st.caption("Share your masterpiece! Give it a catchy title so others can discover it.")
-            post_title = st.text_input("Give your itinerary a title:", placeholder="e.g., Ultimate 3-Day HK Foodie Tour")
-            
-            if st.button("Publish Itinerary", type="primary"):
-                if not post_title:
-                    st.warning("Please enter a title before publishing.")
-                else:
-                    db_df_current = load_itineraries()
-                    new_id = str(uuid.uuid4())[:8]
-                    new_row = pd.DataFrame([{
-                        "ID": new_id,
-                        "Title": post_title,
-                        "Pace": pace_option,
-                        "Duration": duration_option,
-                        "Itinerary": st.session_state.itinerary_text,
-                        "Budget": st.session_state.transport_budget_text,
-                        "Liked_By": "" 
-                    }])
-                    updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
-                    if save_itineraries(updated_df):
-                        st.session_state.publish_success_flag = True
-                        st.rerun()
-
-            # 透過 Session State 標記確保提示訊息穩固留在畫面上有感回饋
-            if st.session_state.publish_success_flag:
-                st.success("🎉 Published successfully! Check it out in the Explore tab.")
+                st.markdown(st.session_state
