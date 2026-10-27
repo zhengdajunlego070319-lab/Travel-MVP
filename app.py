@@ -17,6 +17,7 @@ st.markdown("""
 <style>
     .reportview-container { background: #f7f9fc; }
     .top-rated-badge { background: #ff4b4b; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+    .welcome-card { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-top: 6px solid #ff4b4b; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -24,7 +25,45 @@ st.title("📍 Pinpoint")
 st.subheader("Grab your Itinerary on Fingertips!")
 st.markdown("---")
 
-# --- 2. API Configuration ---
+# --- 2. Welcome Splash Screen (Guidelines) ---
+if 'welcome_shown' not in st.session_state:
+    st.session_state.welcome_shown = False
+
+if not st.session_state.welcome_shown:
+    st.markdown('<div class="welcome-card">', unsafe_allow_html=True)
+    st.markdown("## Welcome to Pinpoint 📍")
+    st.markdown("*Whether you are looking for instant inspiration or crafting the perfect trip, here is your quick guide to mastering the platform.*")
+    
+    st.markdown("""
+    ### 🌍 Explore the Community
+    *   **Discover:** Browse smart itineraries crafted and published by fellow travelers.
+    *   **Find Your Vibe:** Use the dropdown filter to sort trips by your preferred pace—Relaxed, Balanced, or Packed.
+    *   **Show Some Love:** Found a brilliant route? Hit the **❤️ Like** button to boost it up the "🔥 Top Rated" leaderboard.
+
+    ### ✨ Create Your Masterpiece
+    *   **Bring Your Vision:** Upload up to 4 aesthetic photos or screenshots of places you want to visit.
+    *   **Set the Rules:** Define your trip duration, travel pace, and daily time windows. 
+    *   **Generate:** Let our AI engine build a chronologically mapped, beautifully structured schedule.
+
+    ### 🛠️ Refine & Perfect
+    *   **You're the Boss:** Want to make a change? Use the **Refine Your Itinerary** text box to ask for specific tweaks (e.g., "Make Day 1 more relaxed"). Pinpoint will instantly rewrite your schedule.
+
+    ### 💰 Logistics, Export & Publish
+    *   **Crunch the Numbers:** Generate the **Transport & Budget Breakdown** for precise transit guides and cost estimates.
+    *   **Share on Socials:** Download the Instagram-ready HTML file—perfectly proportioned for a mobile screenshot.
+    *   **Join the Ranks:** Give your creation a catchy name and publish it to the community for others to discover!
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Got it! Let's Go 🚀", type="primary", use_container_width=True):
+        st.session_state.welcome_shown = True
+        st.rerun()
+    
+    # st.stop() 會在這裡暫停程式，直到使用者點擊上方的按鈕解鎖
+    st.stop()
+
+# --- 3. API Configuration ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except KeyError:
@@ -34,13 +73,12 @@ except KeyError:
 genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-3.1-flash-lite')
 
-# --- TRUE CLOUD DATABASE FUNCTIONS ---
+# --- 4. TRUE CLOUD DATABASE FUNCTIONS ---
 @st.cache_data(ttl=5) # 5秒刷新一次，確保看到最新的社群動態
 def load_data():
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(worksheet="Sheet1")
-        # 確保即使表格是空的，也能回傳正確的欄位結構
         if df.empty or 'ID' not in df.columns:
             return pd.DataFrame(columns=["ID", "Title", "Pace", "Duration", "Itinerary", "Budget", "Likes"])
         return df
@@ -58,7 +96,7 @@ def save_data(df):
         st.error(f"Database Write Error: {e}")
         return False
 
-# --- 3. App Architecture: TABS ---
+# --- 5. App Architecture: TABS ---
 tab_explore, tab_create = st.tabs(["🌍 Explore Community", "✨ Create Itinerary"])
 
 # ==========================================
@@ -205,7 +243,7 @@ with tab_create:
                 Feedback:
                 {user_feedback}
                 
-                Constraints: Maintain the exact same formatting structure.
+                Constraints: Maintain the exact same formatting structure (Main itinerary + Extra Recommendations table).
                 CRITICAL: End with "===MAP_DATA===" followed by a comma-separated list of official landmark names.
                 """
                 try:
@@ -334,6 +372,7 @@ with tab_create:
         b64_html = base64.b64encode(full_html.encode()).decode()
         href_html = f'<a href="data:text/html;base64,{b64_html}" download="Pinpoint_Story.html" style="text-decoration: none; padding: 16px 20px; background-color: #111; color: white; font-weight: bold; border-radius: 12px; display: block; text-align: center; font-size: 16px;">Download Image Format (HTML)</a>'
         st.markdown(href_html, unsafe_allow_html=True)
+        st.caption("*(Open the downloaded file on your phone or browser, and it will be perfectly proportioned for an Instagram Story screenshot!)*")
 
         # --- REAL Publish to Database ---
         st.markdown('---')
