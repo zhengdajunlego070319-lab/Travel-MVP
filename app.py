@@ -35,28 +35,6 @@ if 'detail_itinerary_id' not in st.session_state:
 if 'welcome_shown' not in st.session_state:
     st.session_state.welcome_shown = False
 
-if 'show_publish_dialog' not in st.session_state:
-    st.session_state.show_publish_dialog = False
-
-# --- Pop-up Dialog for Publish Success (必須在頂層定義) ---
-@st.dialog("🎉 Published Successfully!")
-def publish_success_dialog():
-    st.write("Your masterpiece is now live in the community. What would you like to do next?")
-    col1, col2 = st.columns(2)
-    if col1.button("Stay Here", use_container_width=True):
-        st.session_state.show_publish_dialog = False
-        st.rerun()
-    if col2.button("Go to Community", type="primary", use_container_width=True):
-        st.session_state.show_publish_dialog = False
-        st.session_state.current_view = 'home'
-        st.session_state.phase1_done = False
-        st.session_state.phase2_done = False
-        st.rerun()
-
-# 如果觸發了彈出視窗狀態，在此處展開
-if st.session_state.show_publish_dialog:
-    publish_success_dialog()
-
 # --- Welcome Splash Screen ---
 if not st.session_state.welcome_shown:
     st.title("📍 Pinpoint")
@@ -465,5 +443,4 @@ elif st.session_state.current_view == 'home':
                     }])
                     updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
                     if save_itineraries(updated_df):
-                        st.session_state.show_publish_dialog = True
-                        st.rerun()
+                        st.success("🎉 Published successfully! Check it out in the Explore tab.")
