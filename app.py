@@ -35,6 +35,28 @@ if 'detail_itinerary_id' not in st.session_state:
 if 'welcome_shown' not in st.session_state:
     st.session_state.welcome_shown = False
 
+if 'show_publish_dialog' not in st.session_state:
+    st.session_state.show_publish_dialog = False
+
+# --- Pop-up Dialog for Publish Success (必須在頂層定義) ---
+@st.dialog("🎉 Published Successfully!")
+def publish_success_dialog():
+    st.write("Your masterpiece is now live in the community. What would you like to do next?")
+    col1, col2 = st.columns(2)
+    if col1.button("Stay Here", use_container_width=True):
+        st.session_state.show_publish_dialog = False
+        st.rerun()
+    if col2.button("Go to Community", type="primary", use_container_width=True):
+        st.session_state.show_publish_dialog = False
+        st.session_state.current_view = 'home'
+        st.session_state.phase1_done = False
+        st.session_state.phase2_done = False
+        st.rerun()
+
+# 如果觸發了彈出視窗狀態，在此處展開
+if st.session_state.show_publish_dialog:
+    publish_success_dialog()
+
 # --- Welcome Splash Screen ---
 if not st.session_state.welcome_shown:
     st.title("📍 Pinpoint")
@@ -109,20 +131,6 @@ def toggle_like(liked_by_str, user_id):
         liked_list.append(user_id)
     return ','.join(liked_list)
 
-# --- Pop-up Dialog for Publish Success ---
-@st.dialog("🎉 Published Successfully!")
-def publish_success_dialog():
-    st.write("Your masterpiece is now live in the community. What would you like to do next?")
-    col1, col2 = st.columns(2)
-    if col1.button("Stay Here", use_container_width=True):
-        st.rerun()
-    if col2.button("Go to Community", type="primary", use_container_width=True):
-        # 導向社群大廳並重置創建進度
-        st.session_state.current_view = 'home'
-        st.session_state.phase1_done = False
-        st.session_state.phase2_done = False
-        st.rerun()
-
 # ==========================================
 # VIEW ROUTER 1: DETAIL PAGE (獨立詳情與留言頁面)
 # ==========================================
@@ -191,7 +199,6 @@ if st.session_state.current_view == 'detail':
         with st.form("new_comment_form", clear_on_submit=True):
             st.markdown("##### Leave a Comment")
             c_name = st.text_input("Your Name (Optional):", placeholder="Anonymous")
-            # 修正 TypeError：移除 required=True，改為手動判斷
             c_content = st.text_area("What do you think about this trip?")
             submitted = st.form_submit_button("Post Comment")
             
@@ -458,4 +465,5 @@ elif st.session_state.current_view == 'home':
                     }])
                     updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
                     if save_itineraries(updated_df):
-                        publish_success_dialog() # 觸發彈出視窗
+                        st.session_state.show_publish_dialog = True
+                        st.rerun()
