@@ -77,7 +77,7 @@ except KeyError:
     st.error("System Error: API Key missing.")
     st.stop()
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-3.5-flash-lite')
 
 @st.cache_data(ttl=2)
 def load_itineraries():
