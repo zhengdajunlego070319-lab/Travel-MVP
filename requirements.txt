@@ -1,8 +1,8 @@
 streamlit
-google-generativeai
 pandas
 geopy
 folium
-streamlit-folium
 Pillow
+google-genai
+streamlit-folium
 streamlit-gsheets
