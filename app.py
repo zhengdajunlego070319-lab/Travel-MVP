@@ -5,7 +5,7 @@ import pandas as pd
 from geopy.geocoders import Nominatim
 import folium
 from PIL import Image
-from google import genai
+import google.generativeai as genai
 import streamlit as st
 from streamlit_folium import st_folium
 from streamlit_gsheets import GSheetsConnection
@@ -76,9 +76,8 @@ try:
 except KeyError:
     st.error("System Error: API Key missing.")
     st.stop()
-
-# 使用新版 Google GenAI SDK 初始化 Client
-client = genai.Client(api_key=api_key)
+genai.configure(api_key=api_key)
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 @st.cache_data(ttl=2)
 def load_itineraries():
@@ -87,7 +86,6 @@ def load_itineraries():
         df = conn.read(worksheet="Sheet1")
         if df.empty or 'ID' not in df.columns:
             return pd.DataFrame(columns=["ID", "Title", "Pace", "Duration", "Itinerary", "Budget", "Liked_By"])
-        # 確保字串欄位安全轉換並填補空值，避免 Pandas 警告與 KeyError
         expected_cols = ["ID", "Title", "Pace", "Duration", "Itinerary", "Budget", "Liked_By"]
         for col in expected_cols:
             if col not in df.columns:
@@ -328,11 +326,7 @@ elif st.session_state.current_view == 'home':
                     CRITICAL: End with "===MAP_DATA===" followed by a comma-separated list of the exact official landmark names.
                     """
                     try:
-                        # 使用新版 SDK 呼叫方式 (支援帶入圖片)
-                        response = client.models.generate_content(
-                            model='gemini-2.5-flash',
-                            contents=[prompt, *images]
-                        )
+                        response = model.generate_content([prompt, *images])
                         raw_text = response.text
                         if "===MAP_DATA===" in raw_text:
                             parts = raw_text.split("===MAP_DATA===")
@@ -366,10 +360,7 @@ elif st.session_state.current_view == 'home':
                     Constraints: Maintain formatting. CRITICAL: End with "===MAP_DATA===" and landmark list.
                     """
                     try:
-                        refine_resp = client.models.generate_content(
-                            model='gemini-2.5-flash',
-                            contents=refine_prompt
-                        )
+                        refine_resp = model.generate_content([refine_prompt])
                         raw_refine_text = refine_resp.text
                         if "===MAP_DATA===" in raw_refine_text:
                             parts = raw_refine_text.split("===MAP_DATA===")
@@ -414,10 +405,7 @@ elif st.session_state.current_view == 'home':
                         Requirements: Detailed Transport Guide, Itemized Budget in HKD, Total Calculation.
                         """
                         try:
-                            budget_resp = client.models.generate_content(
-                                model='gemini-2.5-flash',
-                                contents=budget_prompt
-                            )
+                            budget_resp = model.generate_content([budget_prompt])
                             st.session_state.transport_budget_text = budget_resp.text
                             st.session_state.phase2_done = True
                             st.session_state.publish_success_state = False
