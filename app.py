@@ -38,7 +38,7 @@ if 'welcome_shown' not in st.session_state:
 if 'publish_success_msg' not in st.session_state:
     st.session_state.publish_success_msg = False
 
-# --- Welcome Splash Screen (Updated Clean Guidelines) ---
+# --- Welcome Splash Screen ---
 if not st.session_state.welcome_shown:
     st.title("📍 Pinpoint")
     st.markdown('<div class="welcome-card">', unsafe_allow_html=True)
@@ -67,6 +67,14 @@ if not st.session_state.welcome_shown:
 
 st.title("📍 Pinpoint")
 st.subheader("Grab your Itinerary on Fingertips!")
+
+# ==========================================
+# 🎯 頁面頂端全域發佈成功通知 (Top Banner)
+# ==========================================
+if st.session_state.publish_success_msg:
+    st.success("🎉 Published successfully! Your itinerary is now live in the community.")
+    st.session_state.publish_success_msg = False # 讀取後立刻清空，避免重複顯示
+
 st.markdown("---")
 
 # --- 3. API & TRUE CLOUD DB SETUP ---
@@ -252,15 +260,6 @@ elif st.session_state.current_view == 'home':
 
     # --- TAB 2: CREATE ITINERARY ---
     with tab_create:
-        if st.session_state.publish_success_msg:
-            st.success("🎉 Your itinerary was published successfully to the community!")
-            if st.button("🔄 Create Another Itinerary"):
-                st.session_state.publish_success_msg = False
-                st.session_state.phase1_done = False
-                st.session_state.phase2_done = False
-                st.rerun()
-            st.markdown("---")
-
         if 'phase1_done' not in st.session_state: st.session_state.phase1_done = False
         if 'itinerary_text' not in st.session_state: st.session_state.itinerary_text = ''
         if 'all_locations' not in st.session_state: st.session_state.all_locations = []
@@ -315,7 +314,6 @@ elif st.session_state.current_view == 'home':
                             st.session_state.all_locations = []
                         st.session_state.phase1_done = True
                         st.session_state.phase2_done = False  
-                        st.session_state.publish_success_msg = False
                         st.rerun()
                     except Exception as e:
                         st.error(f'Generation Error: {str(e)}')
@@ -347,7 +345,6 @@ elif st.session_state.current_view == 'home':
                         else:
                             st.session_state.itinerary_text = raw_refine_text.strip()
                         st.session_state.phase2_done = False
-                        st.session_state.publish_success_msg = False
                         st.rerun()
                     except Exception as e:
                         st.error(f'Refinement Error: {str(e)}')
@@ -386,7 +383,6 @@ elif st.session_state.current_view == 'home':
                             budget_resp = model.generate_content([budget_prompt])
                             st.session_state.transport_budget_text = budget_resp.text
                             st.session_state.phase2_done = True
-                            st.session_state.publish_success_msg = False
                             st.rerun()
                         except Exception as e:
                             st.error(f'Error: {str(e)}')
@@ -451,21 +447,18 @@ elif st.session_state.current_view == 'home':
                 if not post_title:
                     st.warning("Please enter a title before publishing.")
                 else:
-                    with st.spinner("Publishing your itinerary to the cloud database..."):
-                        db_df_current = load_itineraries()
-                        new_id = str(uuid.uuid4())[:8]
-                        new_row = pd.DataFrame([{
-                            "ID": new_id,
-                            "Title": post_title,
-                            "Pace": pace_option,
-                            "Duration": duration_option,
-                            "Itinerary": st.session_state.itinerary_text,
-                            "Budget": st.session_state.transport_budget_text,
-                            "Liked_By": "" 
-                        }])
-                        updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
-                        if save_itineraries(updated_df):
-                            st.session_state.publish_success_msg = True
-                            st.balloons()
-                            time.sleep(0.5)
-                            st.rerun()
+                    db_df_current = load_itineraries()
+                    new_id = str(uuid.uuid4())[:8]
+                    new_row = pd.DataFrame([{
+                        "ID": new_id,
+                        "Title": post_title,
+                        "Pace": pace_option,
+                        "Duration": duration_option,
+                        "Itinerary": st.session_state.itinerary_text,
+                        "Budget": st.session_state.transport_budget_text,
+                        "Liked_By": "" 
+                    }])
+                    updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
+                    if save_itineraries(updated_df):
+                        st.session_state.publish_success_msg = True
+                        st.rerun()
