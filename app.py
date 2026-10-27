@@ -5,7 +5,7 @@ import pandas as pd
 from geopy.geocoders import Nominatim
 import folium
 from PIL import Image
-import google.generativeai as genai
+from google import genai
 import streamlit as st
 from streamlit_folium import st_folium
 from streamlit_gsheets import GSheetsConnection
@@ -76,8 +76,9 @@ try:
 except KeyError:
     st.error("System Error: API Key missing.")
     st.stop()
-genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-3.1-flash-lite')
+
+# 使用新版 Google GenAI SDK 初始化 Client
+client = genai.Client(api_key=api_key)
 
 @st.cache_data(ttl=2)
 def load_itineraries():
@@ -86,7 +87,14 @@ def load_itineraries():
         df = conn.read(worksheet="Sheet1")
         if df.empty or 'ID' not in df.columns:
             return pd.DataFrame(columns=["ID", "Title", "Pace", "Duration", "Itinerary", "Budget", "Liked_By"])
-        return df.fillna("")
+        # 確保字串欄位安全轉換並填補空值，避免 Pandas 警告與 KeyError
+        expected_cols = ["ID", "Title", "Pace", "Duration", "Itinerary", "Budget", "Liked_By"]
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = ""
+            else:
+                df[col] = df[col].astype(str).fillna("")
+        return df
     except:
         return pd.DataFrame(columns=["ID", "Title", "Pace", "Duration", "Itinerary", "Budget", "Liked_By"])
 
@@ -97,7 +105,13 @@ def load_comments():
         df = conn.read(worksheet="Comments")
         if df.empty or 'Comment_ID' not in df.columns:
             return pd.DataFrame(columns=["Comment_ID", "Itinerary_ID", "User_Name", "Content", "Liked_By"])
-        return df.fillna("")
+        expected_cols = ["Comment_ID", "Itinerary_ID", "User_Name", "Content", "Liked_By"]
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = ""
+            else:
+                df[col] = df[col].astype(str).fillna("")
+        return df
     except:
         return pd.DataFrame(columns=["Comment_ID", "Itinerary_ID", "User_Name", "Content", "Liked_By"])
 
@@ -217,7 +231,6 @@ elif st.session_state.current_view == 'home':
     with tab_explore:
         st.markdown("### Discover & Get Inspired")
         
-        # 重新整理提示與按鈕
         col_msg, col_btn = st.columns([4, 1])
         with col_msg:
             st.caption("💡 Tip: Don't see the latest trips? Click refresh to fetch the newest itineraries.")
@@ -268,6 +281,9 @@ elif st.session_state.current_view == 'home':
         if 'phase2_done' not in st.session_state: st.session_state.phase2_done = False
         if 'transport_budget_text' not in st.session_state: st.session_state.transport_budget_text = ''
 
+        # 安全初始化 enable_map，避免 NameError
+        enable_map = False
+
         uploaded_files = st.file_uploader('Upload visual inspirations (Images):', type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
         if uploaded_files:
@@ -281,7 +297,6 @@ elif st.session_state.current_view == 'home':
 
             st.markdown('### Trip Preferences')
             
-            # --- 調整後的 Duration 選擇：單位與數量分離 ---
             col_dur1, col_dur2 = st.columns(2)
             with col_dur1:
                 dur_unit = st.selectbox('Duration Unit:', ['Day(s)', 'Week(s)'])
@@ -313,7 +328,11 @@ elif st.session_state.current_view == 'home':
                     CRITICAL: End with "===MAP_DATA===" followed by a comma-separated list of the exact official landmark names.
                     """
                     try:
-                        response = model.generate_content([prompt, *images])
+                        # 使用新版 SDK 呼叫方式 (支援帶入圖片)
+                        response = client.models.generate_content(
+                            model='gemini-2.5-flash',
+                            contents=[prompt, *images]
+                        )
                         raw_text = response.text
                         if "===MAP_DATA===" in raw_text:
                             parts = raw_text.split("===MAP_DATA===")
@@ -347,7 +366,10 @@ elif st.session_state.current_view == 'home':
                     Constraints: Maintain formatting. CRITICAL: End with "===MAP_DATA===" and landmark list.
                     """
                     try:
-                        refine_resp = model.generate_content([refine_prompt])
+                        refine_resp = client.models.generate_content(
+                            model='gemini-2.5-flash',
+                            contents=refine_prompt
+                        )
                         raw_refine_text = refine_resp.text
                         if "===MAP_DATA===" in raw_refine_text:
                             parts = raw_refine_text.split("===MAP_DATA===")
@@ -392,7 +414,10 @@ elif st.session_state.current_view == 'home':
                         Requirements: Detailed Transport Guide, Itemized Budget in HKD, Total Calculation.
                         """
                         try:
-                            budget_resp = model.generate_content([budget_prompt])
+                            budget_resp = client.models.generate_content(
+                                model='gemini-2.5-flash',
+                                contents=budget_prompt
+                            )
                             st.session_state.transport_budget_text = budget_resp.text
                             st.session_state.phase2_done = True
                             st.session_state.publish_success_state = False
@@ -473,8 +498,8 @@ elif st.session_state.current_view == 'home':
                             "Liked_By": "" 
                         }])
                         updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
-                        if save_itineraries(updated_df):
-                            st.session_state.publish_success_state = True
+                        save_itineraries(updated_df)
+                        st.session_state.publish_success_state = True
 
             if st.session_state.publish_success_state:
                 st.success("🎉 Published successfully! Your itinerary is now live in the community.")
