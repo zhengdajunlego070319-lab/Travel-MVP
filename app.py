@@ -217,13 +217,13 @@ elif st.session_state.current_view == 'home':
     with tab_explore:
         st.markdown("### Discover & Get Inspired")
         
-        # 相對不顯眼但清晰可見的刷新提示與按鈕
+        # 重新整理提示與按鈕
         col_msg, col_btn = st.columns([4, 1])
         with col_msg:
             st.caption("💡 Tip: Don't see the latest trips? Click refresh to fetch the newest itineraries.")
         with col_btn:
             if st.button("🔄 Refresh", use_container_width=True, key="refresh_community_btn"):
-                st.cache_data.clear() # 清除快取以強制從 Google Sheets 讀取最新數據
+                st.cache_data.clear()
                 st.rerun()
 
         db_df = load_itineraries()
@@ -280,9 +280,17 @@ elif st.session_state.current_view == 'home':
                     st.image(img, use_container_width=True)
 
             st.markdown('### Trip Preferences')
+            
+            # --- 調整後的 Duration 選擇：單位與數量分離 ---
+            col_dur1, col_dur2 = st.columns(2)
+            with col_dur1:
+                dur_unit = st.selectbox('Duration Unit:', ['Day(s)', 'Week(s)'])
+            with col_dur2:
+                dur_value = st.number_input('Duration Amount:', min_value=1, max_value=30, value=3)
+            duration_option = f"{dur_value} {dur_unit}"
+
             col1, col2 = st.columns(2)
             with col1:
-                duration_option = st.selectbox('Duration:', ['Half Day', '1 Day', '2 Days', '3 Days', '1 Week'])
                 start_time = st.text_input('Start Time:', value='09:00')
             with col2:
                 pace_option = st.selectbox('Pace:', ['Relaxed', 'Balanced', 'Packed'])
