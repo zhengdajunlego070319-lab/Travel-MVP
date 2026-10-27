@@ -24,10 +24,10 @@ st.markdown("""
 
 # --- 2. Session State Initialization (Identity & Routing) ---
 if 'user_id' not in st.session_state:
-    st.session_state.user_id = str(uuid.uuid4())[:8] # 配發虛擬設備 ID (用於防刷讚)
+    st.session_state.user_id = str(uuid.uuid4())[:8]
 
 if 'current_view' not in st.session_state:
-    st.session_state.current_view = 'home' # 頁面路由：home 或 detail
+    st.session_state.current_view = 'home'
 
 if 'detail_itinerary_id' not in st.session_state:
     st.session_state.detail_itinerary_id = None
@@ -101,15 +101,27 @@ def save_comments(df):
     conn.update(worksheet="Comments", data=df)
     st.cache_data.clear()
 
-# --- Helper Logic for Toggle Like ---
 def toggle_like(liked_by_str, user_id):
     liked_list = str(liked_by_str).split(',') if str(liked_by_str).strip() != '' else []
     if user_id in liked_list:
-        liked_list.remove(user_id) # 取消讚
+        liked_list.remove(user_id)
     else:
-        liked_list.append(user_id) # 按讚
+        liked_list.append(user_id)
     return ','.join(liked_list)
 
+# --- Pop-up Dialog for Publish Success ---
+@st.dialog("🎉 Published Successfully!")
+def publish_success_dialog():
+    st.write("Your masterpiece is now live in the community. What would you like to do next?")
+    col1, col2 = st.columns(2)
+    if col1.button("Stay Here", use_container_width=True):
+        st.rerun()
+    if col2.button("Go to Community", type="primary", use_container_width=True):
+        # 導向社群大廳並重置創建進度
+        st.session_state.current_view = 'home'
+        st.session_state.phase1_done = False
+        st.session_state.phase2_done = False
+        st.rerun()
 
 # ==========================================
 # VIEW ROUTER 1: DETAIL PAGE (獨立詳情與留言頁面)
@@ -134,7 +146,6 @@ if st.session_state.current_view == 'detail':
         st.markdown(f"## {row['Title']}")
         st.caption(f"⏱️ {row['Duration']} | 🚶‍♂️ Pace: {row['Pace']}")
         
-        # 主行程按讚按鈕 (Toggle)
         btn_label = f"❤️ {like_count} Likes (Click to Unlike)" if has_liked else f"🤍 {like_count} Likes"
         if st.button(btn_label, key=f"detail_like_{row['ID']}"):
             new_liked_by = toggle_like(row['Liked_By'], st.session_state.user_id)
@@ -149,7 +160,6 @@ if st.session_state.current_view == 'detail':
             st.markdown("**💰 Logistics & Budget:**")
             st.markdown(row['Budget'])
 
-        # --- Comments Section ---
         st.markdown("---")
         st.markdown("### 💬 Comments")
         
@@ -171,7 +181,6 @@ if st.session_state.current_view == 'detail':
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # 留言按讚按鈕 (Toggle)
                 c_btn_label = f"❤️ {c_like_count}" if c_has_liked else f"🤍 {c_like_count}"
                 if st.button(c_btn_label, key=f"clike_{c_row['Comment_ID']}"):
                     new_c_liked = toggle_like(c_row['Liked_By'], st.session_state.user_id)
@@ -179,27 +188,29 @@ if st.session_state.current_view == 'detail':
                     save_comments(df_com)
                     st.rerun()
 
-        # Add new comment
         with st.form("new_comment_form", clear_on_submit=True):
             st.markdown("##### Leave a Comment")
             c_name = st.text_input("Your Name (Optional):", placeholder="Anonymous")
-            c_content = st.text_area("What do you think about this trip?", required=True)
+            # 修正 TypeError：移除 required=True，改為手動判斷
+            c_content = st.text_area("What do you think about this trip?")
             submitted = st.form_submit_button("Post Comment")
             
             if submitted:
-                new_c_id = str(uuid.uuid4())[:8]
-                new_comment = pd.DataFrame([{
-                    "Comment_ID": new_c_id,
-                    "Itinerary_ID": row['ID'],
-                    "User_Name": c_name if c_name.strip() else "Anonymous Traveler",
-                    "Content": c_content,
-                    "Liked_By": ""
-                }])
-                df_com = pd.concat([df_com, new_comment], ignore_index=True)
-                save_comments(df_com)
-                st.success("Comment posted!")
-                st.rerun()
-
+                if not c_content.strip():
+                    st.warning("Please enter a comment before posting.")
+                else:
+                    new_c_id = str(uuid.uuid4())[:8]
+                    new_comment = pd.DataFrame([{
+                        "Comment_ID": new_c_id,
+                        "Itinerary_ID": row['ID'],
+                        "User_Name": c_name if c_name.strip() else "Anonymous Traveler",
+                        "Content": c_content,
+                        "Liked_By": ""
+                    }])
+                    df_com = pd.concat([df_com, new_comment], ignore_index=True)
+                    save_comments(df_com)
+                    st.success("Comment posted!")
+                    st.rerun()
 
 # ==========================================
 # VIEW ROUTER 2: HOME TABS (社群大廳與創建)
@@ -216,7 +227,6 @@ elif st.session_state.current_view == 'home':
         if db_df.empty:
             st.info("The community is currently empty. Go to 'Create Itinerary' and be the first to publish!")
         else:
-            # 計算每篇的讚數來作排行
             db_df['Like_Count'] = db_df['Liked_By'].apply(lambda x: len(str(x).split(',')) if str(x).strip() != '' else 0)
             
             col_f1, col_f2 = st.columns(2)
@@ -241,8 +251,7 @@ elif st.session_state.current_view == 'home':
                             st.caption(f"⏱️ {row['Duration']} | 🚶‍♂️ Pace: {row['Pace']} | ❤️ {row['Like_Count']} Likes")
                         
                         with cols_header[1]:
-                            # 進入獨立詳情頁
-                            if st.button("👁️ View Details & Comments", key=f"view_{row['ID']}", use_container_width=True):
+                            if st.button("👁️ View Details", key=f"view_{row['ID']}", use_container_width=True):
                                 st.session_state.current_view = 'detail'
                                 st.session_state.detail_itinerary_id = row['ID']
                                 st.rerun()
@@ -276,7 +285,7 @@ elif st.session_state.current_view == 'home':
                 end_time = st.text_input('End Time:', value='21:00')
             
             extra_details = st.text_input('Additional Hints (Optional):')
-            enable_map = st.checkbox('Generate Interactive Route Map (Note: May take a few minutes to load)', value=False)
+            enable_map = st.checkbox('Generate Interactive Route Map (Note: May take a few minutes)', value=False)
 
             if st.button('Generate Custom Itinerary', type='primary', use_container_width=True):
                 with st.spinner('Analyzing and building your schedule...'):
@@ -445,8 +454,8 @@ elif st.session_state.current_view == 'home':
                         "Duration": duration_option,
                         "Itinerary": st.session_state.itinerary_text,
                         "Budget": st.session_state.transport_budget_text,
-                        "Liked_By": "" # 初始沒有人按讚
+                        "Liked_By": "" 
                     }])
                     updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
                     if save_itineraries(updated_df):
-                        st.success("🎉 Published successfully! Check it out in the Explore tab.")
+                        publish_success_dialog() # 觸發彈出視窗
