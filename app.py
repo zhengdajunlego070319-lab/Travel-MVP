@@ -35,6 +35,9 @@ if 'detail_itinerary_id' not in st.session_state:
 if 'welcome_shown' not in st.session_state:
     st.session_state.welcome_shown = False
 
+if 'publish_success_msg' not in st.session_state:
+    st.session_state.publish_success_msg = False
+
 # --- Welcome Splash Screen ---
 if not st.session_state.welcome_shown:
     st.title("📍 Pinpoint")
@@ -194,7 +197,7 @@ if st.session_state.current_view == 'detail':
                     }])
                     df_com = pd.concat([df_com, new_comment], ignore_index=True)
                     save_comments(df_com)
-                    st.toast("Comment posted successfully!", icon="✅")
+                    st.success("Comment posted successfully!")
                     st.rerun()
 
 # ==========================================
@@ -297,6 +300,7 @@ elif st.session_state.current_view == 'home':
                             st.session_state.all_locations = []
                         st.session_state.phase1_done = True
                         st.session_state.phase2_done = False  
+                        st.session_state.publish_success_msg = False
                         st.rerun()
                     except Exception as e:
                         st.error(f'Generation Error: {str(e)}')
@@ -328,6 +332,7 @@ elif st.session_state.current_view == 'home':
                         else:
                             st.session_state.itinerary_text = raw_refine_text.strip()
                         st.session_state.phase2_done = False
+                        st.session_state.publish_success_msg = False
                         st.rerun()
                     except Exception as e:
                         st.error(f'Refinement Error: {str(e)}')
@@ -366,6 +371,7 @@ elif st.session_state.current_view == 'home':
                             budget_resp = model.generate_content([budget_prompt])
                             st.session_state.transport_budget_text = budget_resp.text
                             st.session_state.phase2_done = True
+                            st.session_state.publish_success_msg = False
                             st.rerun()
                         except Exception as e:
                             st.error(f'Error: {str(e)}')
@@ -430,17 +436,25 @@ elif st.session_state.current_view == 'home':
                 if not post_title:
                     st.warning("Please enter a title before publishing.")
                 else:
-                    db_df_current = load_itineraries()
-                    new_id = str(uuid.uuid4())[:8]
-                    new_row = pd.DataFrame([{
-                        "ID": new_id,
-                        "Title": post_title,
-                        "Pace": pace_option,
-                        "Duration": duration_option,
-                        "Itinerary": st.session_state.itinerary_text,
-                        "Budget": st.session_state.transport_budget_text,
-                        "Liked_By": "" 
-                    }])
-                    updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
-                    if save_itineraries(updated_df):
-                        st.toast("🎉 Published successfully! Check it out in the Explore tab.", icon="✅")
+                    # 使用 st.spinner 完美呈現 Loading 提示
+                    with st.spinner("Publishing your itinerary to the cloud database..."):
+                        db_df_current = load_itineraries()
+                        new_id = str(uuid.uuid4())[:8]
+                        new_row = pd.DataFrame([{
+                            "ID": new_id,
+                            "Title": post_title,
+                            "Pace": pace_option,
+                            "Duration": duration_option,
+                            "Itinerary": st.session_state.itinerary_text,
+                            "Budget": st.session_state.transport_budget_text,
+                            "Liked_By": "" 
+                        }])
+                        updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
+                        if save_itineraries(updated_df):
+                            st.session_state.publish_success_msg = True
+                            time.sleep(0.5) # 稍微停頓讓 Loading 畫面更有感
+                            st.rerun()
+
+            # 長駐在頁面上的成功提示文字
+            if st.session_state.publish_success_msg:
+                st.success("🎉 Published successfully! Check it out in the Explore tab.")
