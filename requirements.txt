@@ -3,6 +3,6 @@ pandas
 geopy
 folium
 Pillow
-google-genai
+google-generativeai
 streamlit-folium
 streamlit-gsheets
