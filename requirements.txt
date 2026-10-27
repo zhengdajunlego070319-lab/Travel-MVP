@@ -5,4 +5,4 @@ folium
 Pillow
 google-generativeai
 streamlit-folium
-streamlit-gsheets
+st-gsheets-connection
