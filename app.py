@@ -19,6 +19,7 @@ st.markdown("""
     .top-rated-badge { background: #ff4b4b; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-bottom: 10px; display: inline-block;}
     .welcome-card { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-top: 6px solid #ff4b4b; }
     .comment-box { background: #f9f9f9; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 3px solid #ccc;}
+    .refresh-banner { background: #f1f5f9; padding: 10px 15px; border-radius: 8px; font-size: 13px; color: #475569; display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border: 1px solid #e2e8f0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -216,6 +217,15 @@ elif st.session_state.current_view == 'home':
     with tab_explore:
         st.markdown("### Discover & Get Inspired")
         
+        # 相對不顯眼但清晰可見的刷新提示與按鈕
+        col_msg, col_btn = st.columns([4, 1])
+        with col_msg:
+            st.caption("💡 Tip: Don't see the latest trips? Click refresh to fetch the newest itineraries.")
+        with col_btn:
+            if st.button("🔄 Refresh", use_container_width=True, key="refresh_community_btn"):
+                st.cache_data.clear() # 清除快取以強制從 Google Sheets 讀取最新數據
+                st.rerun()
+
         db_df = load_itineraries()
         
         if db_df.empty:
@@ -458,7 +468,6 @@ elif st.session_state.current_view == 'home':
                         if save_itineraries(updated_df):
                             st.session_state.publish_success_state = True
 
-            # 如果發佈成功，直接在按鈕下方原地顯示成功提示與新按鈕！
             if st.session_state.publish_success_state:
                 st.success("🎉 Published successfully! Your itinerary is now live in the community.")
                 if st.button("✨ Create Another Itinerary"):
