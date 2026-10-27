@@ -77,7 +77,7 @@ except KeyError:
     st.error("System Error: API Key missing.")
     st.stop()
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-2.5-flash')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 @st.cache_data(ttl=2)
 def load_itineraries():
@@ -132,7 +132,7 @@ def toggle_like(liked_by_str, user_id):
     return ','.join(liked_list)
 
 # ==========================================
-# VIEW ROUTER 1: DETAIL PAGE (獨立詳情與留言頁面)
+# VIEW ROUTER 1: DETAIL PAGE
 # ==========================================
 if st.session_state.current_view == 'detail':
     if st.button("⬅️ Back to Explore"):
@@ -220,7 +220,7 @@ if st.session_state.current_view == 'detail':
                     st.rerun()
 
 # ==========================================
-# VIEW ROUTER 2: HOME TABS (社群大廳與創建)
+# VIEW ROUTER 2: HOME TABS
 # ==========================================
 elif st.session_state.current_view == 'home':
     tab_explore, tab_create = st.tabs(["🌍 Explore Community", "✨ Create Itinerary"])
@@ -279,7 +279,6 @@ elif st.session_state.current_view == 'home':
         if 'phase2_done' not in st.session_state: st.session_state.phase2_done = False
         if 'transport_budget_text' not in st.session_state: st.session_state.transport_budget_text = ''
 
-        # 安全初始化 enable_map，避免 NameError
         enable_map = False
 
         uploaded_files = st.file_uploader('Upload visual inspirations (Images):', type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
