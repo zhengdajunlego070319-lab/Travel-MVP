@@ -2,12 +2,9 @@ import base64
 import time
 import uuid
 import pandas as pd
-from geopy.geocoders import Nominatim
-import folium
 from PIL import Image
 import google.generativeai as genai
 import streamlit as st
-from streamlit_folium import st_folium
 from streamlit_gsheets import GSheetsConnection
 
 # --- 1. Branding & UI Setup ---
@@ -48,12 +45,11 @@ if not st.session_state.welcome_shown:
     st.markdown("""
     ### 🌍 Explore the Community
     *   **Discover & Filter:** Browse itineraries and sort trips by travel pace (Relaxed, Balanced, or Packed).
-    *   **Interactive Engagement:** View detailed routes, read comments, and toggle **❤️ Likes** to support your favorite trips.
+    *   **Interactive Engagement:** Read comments, and toggle **❤️ Likes** to support your favorite trips.
 
     ### ✨ Create Your Masterpiece
     *   **Visual AI Generation:** Upload photos to anchor your custom itinerary.
     *   **Smart Refinement:** Easily tweak your schedule using conversational feedback.
-    *   **Interactive Mapping:** Automatically plot your chronological journey on an interactive route map.
 
     ### 💰 Logistics, Export & Share
     *   **Budget Breakdown:** Generate granular, point-to-point transit guides and HKD cost estimates.
@@ -275,11 +271,8 @@ elif st.session_state.current_view == 'home':
     with tab_create:
         if 'phase1_done' not in st.session_state: st.session_state.phase1_done = False
         if 'itinerary_text' not in st.session_state: st.session_state.itinerary_text = ''
-        if 'all_locations' not in st.session_state: st.session_state.all_locations = []
         if 'phase2_done' not in st.session_state: st.session_state.phase2_done = False
         if 'transport_budget_text' not in st.session_state: st.session_state.transport_budget_text = ''
-
-        enable_map = False
 
         uploaded_files = st.file_uploader('Upload visual inspirations (Images):', type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
@@ -309,7 +302,6 @@ elif st.session_state.current_view == 'home':
                 end_time = st.text_input('End Time:', value='21:00')
             
             extra_details = st.text_input('Additional Hints (Optional):')
-            enable_map = st.checkbox('Generate Interactive Route Map (Note: May take a few minutes)', value=False)
 
             if st.button('Generate Custom Itinerary', type='primary', use_container_width=True):
                 with st.spinner('Analyzing and building your schedule...'):
@@ -322,18 +314,10 @@ elif st.session_state.current_view == 'home':
                     2. Apply parameters: Duration: {duration_option}, Pace: {pace_option}, Window: {start_time} to {end_time}.
                     3. Provide a chronological itinerary divided clearly by days using Markdown headings (###). 
                     4. EXTRA RECOMMENDATIONS: Create a dedicated Markdown table titled "### Extra Recommendations".
-                    CRITICAL: End with "===MAP_DATA===" followed by a comma-separated list of the exact official landmark names.
                     """
                     try:
                         response = model.generate_content([prompt, *images])
-                        raw_text = response.text
-                        if "===MAP_DATA===" in raw_text:
-                            parts = raw_text.split("===MAP_DATA===")
-                            st.session_state.itinerary_text = parts[0].strip()
-                            st.session_state.all_locations = [loc.replace('\n', '').strip() for loc in parts[1].split(',') if loc.replace('\n', '').strip()]
-                        else:
-                            st.session_state.itinerary_text = raw_text.strip()
-                            st.session_state.all_locations = []
+                        st.session_state.itinerary_text = response.text.strip()
                         st.session_state.phase1_done = True
                         st.session_state.phase2_done = False  
                         st.session_state.publish_success_state = False
@@ -356,43 +340,16 @@ elif st.session_state.current_view == 'home':
                     OUTPUT STRICTLY IN ENGLISH. Use ONLY functional icons. NO EXPRESSIVE EMOJIS.
                     Existing Itinerary: {st.session_state.itinerary_text}
                     Feedback: {user_feedback}
-                    Constraints: Maintain formatting. CRITICAL: End with "===MAP_DATA===" and landmark list.
+                    Constraints: Maintain formatting.
                     """
                     try:
                         refine_resp = model.generate_content([refine_prompt])
-                        raw_refine_text = refine_resp.text
-                        if "===MAP_DATA===" in raw_refine_text:
-                            parts = raw_refine_text.split("===MAP_DATA===")
-                            st.session_state.itinerary_text = parts[0].strip()
-                            st.session_state.all_locations = [loc.replace('\n', '').strip() for loc in parts[1].split(',') if loc.replace('\n', '').strip()]
-                        else:
-                            st.session_state.itinerary_text = raw_refine_text.strip()
+                        st.session_state.itinerary_text = refine_resp.text.strip()
                         st.session_state.phase2_done = False
                         st.session_state.publish_success_state = False
                         st.rerun()
                     except Exception as e:
                         st.error(f'Refinement Error: {str(e)}')
-
-            if enable_map and st.session_state.all_locations:
-                st.markdown('### Global Route Overview')
-                with st.spinner('Plotting map...'):
-                    geolocator = Nominatim(user_agent='pinpoint_app_v12')
-                    m = folium.Map(location=[22.3193, 114.1694], zoom_start=11)
-                    valid_coords = []
-                    for idx, loc in enumerate(st.session_state.all_locations):
-                        try:
-                            location = geolocator.geocode(loc + ', Hong Kong', timeout=10)
-                            if location:
-                                coords = [location.latitude, location.longitude]
-                                folium.Marker(coords, popup=loc, tooltip=f"Stop {idx + 1}", icon=folium.Icon(color='red', icon='info-sign')).add_to(m)
-                                valid_coords.append(coords)
-                            time.sleep(1)
-                        except:
-                            time.sleep(1)
-                    if len(valid_coords) > 1:
-                        folium.PolyLine(valid_coords, color='#ff4b4b', weight=3).add_to(m)
-                        m.fit_bounds(valid_coords)
-                    st_folium(m, width=700, height=450, key="global_route_map")
 
             st.markdown('---')
             if not st.session_state.phase2_done:
@@ -405,7 +362,7 @@ elif st.session_state.current_view == 'home':
                         """
                         try:
                             budget_resp = model.generate_content([budget_prompt])
-                            st.session_state.transport_budget_text = budget_resp.text
+                            st.session_state.transport_budget_text = budget_resp.text.strip()
                             st.session_state.phase2_done = True
                             st.session_state.publish_success_state = False
                             st.rerun()
@@ -445,53 +402,4 @@ elif st.session_state.current_view == 'home':
                 <div class="story-container">
                     <div class="header">
                         <h1>📍 Pinpoint</h1>
-                        <h3>Grab your Itinerary on Fingertips!</h3>
-                    </div>
-                    <div id="raw-itinerary" style="display:none;">{st.session_state.itinerary_text}</div>
-                    <div id="raw-budget" style="display:none;">{st.session_state.transport_budget_text}</div>
-                    <div class="content-card" id="rendered-itinerary"></div><br>
-                    <div class="content-card" id="rendered-budget"></div>
-                </div>
-                <script>
-                    document.getElementById('rendered-itinerary').innerHTML = marked.parse(document.getElementById('raw-itinerary').textContent);
-                    document.getElementById('rendered-budget').innerHTML = marked.parse(document.getElementById('raw-budget').textContent);
-                </script>
-            </body>
-            </html>
-            """
-            b64_html = base64.b64encode(full_html.encode()).decode()
-            href_html = f'<a href="data:text/html;base64,{b64_html}" download="Pinpoint_Story.html" style="text-decoration: none; padding: 16px 20px; background-color: #111; color: white; font-weight: bold; border-radius: 12px; display: block; text-align: center;">Download Image Format (HTML)</a>'
-            st.markdown(href_html, unsafe_allow_html=True)
-
-            st.markdown('---')
-            st.markdown('### 🌐 Publish to Community')
-            st.caption("Share your masterpiece! Give it a catchy title so others can discover it.")
-            post_title = st.text_input("Give your itinerary a title:", placeholder="e.g., Ultimate 3-Day HK Foodie Tour")
-            
-            if st.button("Publish Itinerary", type="primary"):
-                if not post_title:
-                    st.warning("Please enter a title before publishing.")
-                else:
-                    with st.spinner("Publishing to cloud database..."):
-                        db_df_current = load_itineraries()
-                        new_id = str(uuid.uuid4())[:8]
-                        new_row = pd.DataFrame([{
-                            "ID": new_id,
-                            "Title": post_title,
-                            "Pace": pace_option,
-                            "Duration": duration_option,
-                            "Itinerary": st.session_state.itinerary_text,
-                            "Budget": st.session_state.transport_budget_text,
-                            "Liked_By": "" 
-                        }])
-                        updated_df = pd.concat([db_df_current, new_row], ignore_index=True)
-                        save_itineraries(updated_df)
-                        st.session_state.publish_success_state = True
-
-            if st.session_state.publish_success_state:
-                st.success("🎉 Published successfully! Your itinerary is now live in the community.")
-                if st.button("✨ Create Another Itinerary"):
-                    st.session_state.publish_success_state = False
-                    st.session_state.phase1_done = False
-                    st.session_state.phase2_done = False
-                    st.rerun()
+                        <h3>Grab your Itinerary on Fing
