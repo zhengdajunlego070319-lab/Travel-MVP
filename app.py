@@ -374,8 +374,7 @@ elif st.session_state.current_view == 'home':
             with st.container(border=True):
                 st.markdown(st.session_state.transport_budget_text)
 
-            st.markdown('---')
-            st.markdown('### 🚀 Export (Instagram-Ready)')
+          st.markdown('### 🚀 Export (Instagram-Ready)')
             full_html = f"""
             <!DOCTYPE html>
             <html lang="en">
@@ -402,4 +401,21 @@ elif st.session_state.current_view == 'home':
                 <div class="story-container">
                     <div class="header">
                         <h1>📍 Pinpoint</h1>
-                        <h3>Grab your Itinerary on Fing
+                        <h3>Grab your Itinerary on Fingertips!</h3>
+                    </div>
+                    <div id="raw-itinerary" style="display:none;">{st.session_state.itinerary_text}</div>
+                    <div id="raw-budget" style="display:none;">{st.session_state.transport_budget_text}</div>
+                    <div class="content-card" id="rendered-itinerary"></div><br>
+                    <div class="content-card" id="rendered-budget"></div>
+                </div>
+                <script>
+                    document.getElementById('rendered-itinerary').innerHTML = marked.parse(document.getElementById('raw-itinerary').textContent);
+                    document.getElementById('rendered-budget').innerHTML = marked.parse(document.getElementById('raw-budget').textContent);
+                </script>
+            </body>
+            </html>
+            """
+            
+            b64_html = base64.b64encode(full_html.encode()).decode()
+            href_html = f'<a href="data:text/html;base64,{b64_html}" download="Pinpoint_Story.html" style="text-decoration: none; padding: 16px 20px; background-color: #111; color: white; font-weight: bold; border-radius: 12px; display: block; text-align: center;">Download Image Format (HTML)</a>'
+            st.markdown(href_html, unsafe_allow_html=True)
